@@ -31,6 +31,7 @@ libRobot::libRobot(std::string ipaddressLaser,int laserportRobot, int laserportM
     setLaserParameters(ipaddressLaser,laserportRobot,laserportMe,lascallback);
     setRobotParameters(ipaddressRobot,robotportRobot,robotportMe,robcallback);
     readyFuture=ready_promise.get_future();
+
 }
 
 ///tato funkcia vas nemusi zaujimat
@@ -72,11 +73,14 @@ void libRobot::robotprocess()
             std::chrono::steady_clock::time_point timestampf=std::chrono::steady_clock::now();
 
 
-
-
-
             ///---toto je callback funkcia...
-            std::async(std::launch::async, [this](TKobukiData sensdata) { robot_callback(sensdata); },sens);
+            std::async(std::launch::async, [this](TKobukiData sensdata) {
+            //---tu sa vola amcl najprv
+#ifndef DISABLE_AMCL
+            calculateAMCL( sens,dist,theta);
+#endif
+    //-------------------------
+                robot_callback(sensdata); },sens);
 
         }
 
@@ -105,7 +109,25 @@ void libRobot::setArcSpeed(int mmpersec,int radius)
     std::vector<unsigned char> mess=robot.setArcSpeed(mmpersec,radius);
     robotCom.sendMessage(mess);
 }
+#ifndef DISABLE_AMCL
+void libRobot::calculateAMCL(TKobukiData sens,float &ddist, float &dtheta)
+{
+    static unsigned short prevencleft=sens.EncoderLeft;
+    static unsigned short prevencright=sens.EncoderRight;
 
+    short leftadd=sens.EncoderLeft-prevencleft;
+    short rightadd=sens.EncoderRight-prevencright;
+
+    double ddistAddition=((double)(leftadd+rightadd)/2.0)*tickToMeter; //--toto su metre
+    ddist+=1000.0*ddistAddition;
+
+    double thetaAddition= ((double)(rightadd-leftadd)/b)*tickToMeter;
+    dtheta+=thetaAddition;
+    prevencleft=sens.EncoderLeft;
+    prevencright=sens.EncoderRight;
+    //std::cout<<"prirastky "<<ddist<<" "<<dtheta<<std::endl;
+}
+#endif
 ///tato funkcia vas nemusi zaujimat
 /// toto je funkcia s nekonecnou sluckou,ktora cita data z lidaru (UDP komunikacia)
 void libRobot::laserprocess()
@@ -136,6 +158,19 @@ void libRobot::laserprocess()
 
         std::async(std::launch::async, [this](LaserMeasurement sensdata) { laser_callback(sensdata); },measure);
         ///ako som vravel,toto vas nemusi zaujimat
+#ifndef DISABLE_AMCL
+        amcld.amclStep(particles,measure,amclmap,dist,theta);
+        dist=0;
+        theta=0;
+        bestparticle=amcld.getBestParticle(particles);
+    //    int gx,gy;
+       // amcld.worldToGrid(bestparticle.x,bestparticle.y,gx,gy,amclmap);
+        if(amcl_callback!=nullptr)
+        {
+            amcl_callback(bestparticle.x,bestparticle.y,bestparticle.theta);
+        }
+
+#endif
 
     }
     std::cout<<"koniec thread"<<std::endl;

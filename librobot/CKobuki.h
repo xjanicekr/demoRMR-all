@@ -117,6 +117,12 @@ typedef struct
     unsigned short analogInputCh3;
     //---struktura s datami ktore sa nam tam objavia iba na poziadanie
     TExtraRequestData extraInfo;
+    #ifndef DISABLE_AMCL
+    double AMCL_x;
+    double AMCL_y;
+    double AMCL_fi;
+    #endif
+
 }TKobukiData;
 
 

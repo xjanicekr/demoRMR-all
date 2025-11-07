@@ -28,7 +28,7 @@
 #include <iostream>
 #include <memory>
 #include "udp_communication.h"
-
+#include "amcl.h"
 #include "skeleton.h"
 class ROBOT_EXPORT libRobot
 {
@@ -59,7 +59,21 @@ public:
         robot_callback=callback;
         wasRobotSet=1;
     }
+#ifndef DISABLE_AMCL
+    void setAMCLParameters(std::string mappath,int particleCount,double rotSTD,double transSTD,std::function<int(float x, float y,float fi)> callback )
+    {
+       
+        wasAMCLSet=1;
+        amcl_callback=callback;
+        amcld.loadGridMap(/*"mapa.txt"*/mappath,amclmap);
+        amcld.setSTDs(transSTD,rotSTD);
+        particles=amcld.initializeParticles(particleCount,amclmap);
+    }
+    GridMap &getAmclMap(){return amclmap;}
+    Particle &getBestParticle(){return bestparticle;}
+    void getGridCoordinates(double realX,double realY, int &gX,int &gY){amcld.worldToGrid(realX, realY, gX, gY, amclmap);}
 
+#endif
     void setTranslationSpeed(int mmpersec);
 
     void setRotationSpeed(double radpersec);
@@ -95,6 +109,7 @@ private:
     int wasRobotSet;
     int wasCameraSet;
     int wasSkeletonSet;
+    int wasAMCLSet;
     //veci na laser
     LaserMeasurement copyOfLaserData;
     void laserprocess();
@@ -135,7 +150,18 @@ private:
         void skeletonprocess();
         std::function<int(skeleton)> skeleton_callback=nullptr;
 #endif
+#ifndef DISABLE_AMCL
 
+        GridMap amclmap;
+        int gx,gy;
+          amcl amcld;
+        Particle bestparticle;
+        float dist;
+        float theta;
+        std::vector<Particle> particles;
+        void calculateAMCL(TKobukiData sens,float &ddist, float &dtheta);
+        std::function<int(float x, float y,float fi)> amcl_callback=nullptr;
+#endif
 };
 
 #endif // LIBROBOT_H

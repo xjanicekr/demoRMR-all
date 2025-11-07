@@ -24,6 +24,7 @@ class robot : public QObject
 {
     Q_OBJECT
 public:
+    bool startLoging;
     explicit robot(QObject *parent = nullptr);
 
     void initAndStartRobot(std::string ipaddress);
@@ -34,6 +35,7 @@ public:
     void setSpeed(double forw,double rots);
 signals:
     void publishPosition(double x, double y, double z);
+    void publishAMCLPosition(double x, double y, double z);
     void publishLidar(const LaserMeasurement &lidata);
     #ifndef DISABLE_OPENCV
     void publishCamera(const cv::Mat &camframe);
@@ -47,6 +49,8 @@ private:
     double x;
     double y;
     double fi;
+
+
 ///-----------------------------
 /// toto su rychlosti ktore sa nastavuju setSpeedVal a posielaju v processThisRobot
     double forwardspeed;//mm/s
@@ -55,6 +59,7 @@ private:
     ///toto su callbacky co sa sa volaju s novymi datami
     int processThisLidar(LaserMeasurement laserData);
     int processThisRobot(TKobukiData robotdata);
+    int processThisAMCLPosition(float x,float y,float theta);
     #ifndef DISABLE_OPENCV
     int processThisCamera(cv::Mat cameraData);
 #endif
@@ -83,7 +88,13 @@ int updateSkeletonPicture;
      skeleton skeleJoints;
 #endif
     int useDirectCommands;
+#ifndef DISABLE_AMCL
+public:
+    Particle &getBestParticle(){return robotCom.getBestParticle();}
+    GridMap &getAmclMap(){return robotCom.getAmclMap();}
+    void getGridCoordinates(double realX,double realY, int &gX,int &gY){robotCom.getGridCoordinates(realX, realY, gX, gY);}
 
+#endif
 
 };
 

@@ -29,7 +29,7 @@ MainWindow::MainWindow(QWidget *parent) :
 
 
     datacounter=0;
-
+_robot.startLoging=false;
 
 }
 
@@ -75,7 +75,8 @@ void MainWindow::paintEvent(QPaintEvent *event)
             painter.setPen(pero);
             //teraz tu kreslime random udaje... vykreslite to co treba... t.j. data z lidaru
             //   std::cout<<copyOfLaserData.numberOfScans<<std::endl;
-            for(int k=0;k<copyOfLaserData.numberOfScans/*360*/;k++)
+            #ifdef DISABLE_AMCL
+            for(int k=0;k<copyOfLaserData.numberOfScans;k++)
             {
                 int dist=copyOfLaserData.Data[k].scanDistance/20; ///vzdialenost nahodne predelena 20 aby to nejako vyzeralo v okne.. zmen podla uvazenia
                 int xp=rect.width()-(rect.width()/2+dist*2*sin((360.0-copyOfLaserData.Data[k].scanAngle)*3.14159/180.0))+rect.topLeft().x(); //prepocet do obrazovky
@@ -83,6 +84,45 @@ void MainWindow::paintEvent(QPaintEvent *event)
                 if(rect.contains(xp,yp))//ak je bod vo vnutri nasho obdlznika tak iba vtedy budem chciet kreslit
                     painter.drawEllipse(QPoint(xp, yp),2,2);
             }
+#else
+           int rows = static_cast<int>(_robot.getAmclMap().height);
+            int cols = static_cast<int>(_robot.getAmclMap().width);
+
+            double cellWidth  = static_cast<double>(rect.width()) / cols;
+            double cellHeight = static_cast<double>(rect.height()) / rows;
+
+            for (int r = 0; r < rows; ++r) {
+                for (int c = 0; c < cols; ++c) {
+                    QRectF cellRect(c * cellWidth+rect.topLeft().x(), r * cellHeight+rect.topLeft().y(), cellWidth, cellHeight);
+
+                    if (_robot.getAmclMap().distanceField[_robot.getAmclMap().index(c,r)]==1)
+                        painter.setBrush( QColor(0, 200, 0));  // green
+                    else
+                        painter.setBrush( Qt::black);
+
+                    painter.setPen(QColor(100, 100, 100)); // light gray lines
+                    painter.drawRect(cellRect);
+
+                }
+            }
+
+            float robotXp=_robot.getBestParticle().x;
+            float robotYp=_robot.getBestParticle().y;
+            float robotThetaP=_robot.getBestParticle().theta;
+            painter.setPen(QColor(200, 0, 0)); // light gray lines
+            for(int k=0;k<copyOfLaserData.numberOfScans;k++)
+            {
+                float angleRad = robotThetaP -( copyOfLaserData.Data[k].scanAngle) * 3.14159 / 180.0f;
+                float lx = robotXp + copyOfLaserData.Data[k].scanDistance * std::cos(angleRad);
+                float ly = robotYp + copyOfLaserData.Data[k].scanDistance * std::sin(angleRad);
+                int gx, gy;
+                _robot.getGridCoordinates(lx, ly, gx, gy);
+                //_robot.robotCom.amcld.worldToGrid(lx, ly, gx, gy, _robot.robotCom.amclmap);
+                QRectF cellRect(gx * cellWidth+rect.topLeft().x(), gy * cellHeight+rect.topLeft().y(), cellWidth, cellHeight);
+                 painter.drawRect(cellRect);
+
+            }
+#endif
         }
     }
 #ifndef DISABLE_SKELETON
@@ -109,7 +149,12 @@ void  MainWindow::setUiValues(double robotX,double robotY,double robotFi)
     ui->lineEdit_3->setText(QString::number(robotY));
     ui->lineEdit_4->setText(QString::number(robotFi));
 }
-
+#ifndef DISABLE_AMCL
+void MainWindow::setUiAMCLValues(double robotX, double robotY, double robotFi)
+{
+    std::cout<<"poloha z amcl dosla.. asi si to uprav"<<std::endl;
+}
+#endif
 
 void MainWindow::on_pushButton_9_clicked() //start button
 {
@@ -128,7 +173,9 @@ void MainWindow::on_pushButton_9_clicked() //start button
 #ifndef DISABLE_SKELETON
     connect(&_robot,SIGNAL(publishSkeleton(const skeleton &)),this,SLOT(paintThisSkeleton(const skeleton &)));
 #endif
-
+#ifndef DISABLE_AMCL
+    connect(&_robot,SIGNAL(publishAMCLPosition(double,double,double)),this,SLOT(setUiAMCLValues(double,double,double)));
+#endif
     _robot.initAndStartRobot(ipaddress);
 
     #ifndef DISABLE_JOYSTICK
@@ -238,3 +285,14 @@ int MainWindow::paintThisSkeleton(const skeleton &skeledata)
     return 0;
 }
 #endif
+
+void MainWindow::on_pushButton_10_clicked()
+{
+    _robot.startLoging=!_robot.startLoging;
+    if(_robot.startLoging==true)
+        ui->pushButton_10->setText("Stop Logging");
+    else
+        ui->pushButton_10->setText("Start Logging");
+
+}
+

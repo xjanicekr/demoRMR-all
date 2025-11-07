@@ -4,6 +4,7 @@
 #include <QMainWindow>
 #include <QTimer>
 #ifdef _WIN32
+#define NOMINMAX
 #include<windows.h>
 #endif
 #include<iostream>
@@ -69,6 +70,8 @@ public:
 #ifndef DISABLE_SKELETON
     int paintThisSkeleton(const skeleton &skeledata);
 #endif
+    void on_pushButton_10_clicked();
+
 private:
 
     robot _robot;
@@ -87,6 +90,9 @@ private:
 #endif
   public slots:
      void setUiValues(double robotX,double robotY,double robotFi);
+#ifndef DISABLE_AMCL
+     void setUiAMCLValues(double robotX,double robotY,double robotFi);
+#endif
 
 };
 

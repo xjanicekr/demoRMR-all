@@ -34,7 +34,8 @@ LIBS += -lWinmm
 }
 INCLUDEPATH += ../librobot
 LIBS += -L../bin -llibrobot
-
+INCLUDEPATH +=$$PWD/../amcl/include
+LIBS += -L$$PWD/../amcl/lib -lamcl
 !contains(DEFINES, DISABLE_OPENCV) {
 
     win32 {

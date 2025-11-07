@@ -2,6 +2,7 @@
 
 robot::robot(QObject *parent) : QObject(parent)
 {
+    startLoging=false;
     qRegisterMetaType<LaserMeasurement>("LaserMeasurement");
     #ifndef DISABLE_OPENCV
     qRegisterMetaType<cv::Mat>("cv::Mat");
@@ -20,6 +21,9 @@ void robot::initAndStartRobot(std::string ipaddress)
     /// lambdy su super, setria miesto a ak su rozumnej dlzky,tak aj prehladnost... ak ste o nich nic nepoculi poradte sa s vasim doktorom alebo lekarnikom...
     robotCom.setLaserParameters(ipaddress,52999,5299,/*[](LaserMeasurement dat)->int{std::cout<<"som z lambdy callback"<<std::endl;return 0;}*/std::bind(&robot::processThisLidar,this,std::placeholders::_1));
     robotCom.setRobotParameters(ipaddress,53000,5300,std::bind(&robot::processThisRobot,this,std::placeholders::_1));
+    #ifndef DISABLE_AMCL
+    robotCom.setAMCLParameters("mapa.txt",1500,0.01,2,std::bind(&robot::processThisAMCLPosition,this,std::placeholders::_1,std::placeholders::_2,std::placeholders::_3));
+#endif
   #ifndef DISABLE_OPENCV
     robotCom.setCameraParameters("http://"+ipaddress+":8000/stream.mjpg",std::bind(&robot::processThisCamera,this,std::placeholders::_1));
 #endif
@@ -61,6 +65,13 @@ int robot::processThisRobot(TKobukiData robotdata)
     ///tu mozete robit s datami z robota
 
 
+    if(startLoging==true)
+    {
+        std::ofstream robotlog;
+        robotlog.open("robot.log",std::ios::app);
+        robotlog<<robotdata.synctimestamp<<" "<<robotdata.EncoderLeft<<" "<<robotdata.EncoderRight<<" "<<(double)(robotdata.GyroAngle/100.0)<<std::endl;
+        robotlog.close();
+    }
 
 
 ///TU PISTE KOD... TOTO JE TO MIESTO KED NEVIETE KDE ZACAT,TAK JE TO NAOZAJ TU. AK AJ TAK NEVIETE, SPYTAJTE SA CVICIACEHO MA TU NATO STRING KTORY DA DO HLADANIA XXX
@@ -101,12 +112,28 @@ int robot::processThisRobot(TKobukiData robotdata)
 
 }
 
+int robot::processThisAMCLPosition(float x, float y, float theta)
+{
+    std::cout<<"moja amcl poloha je "<<x<<" "<<y<<" "<<theta<<std::endl;
+    emit publishAMCLPosition(x,y,fi);
+    return 0;
+}
+
 ///toto je calback na data z lidaru, ktory ste podhodili robotu vo funkcii initAndStartRobot
 /// vola sa ked dojdu nove data z lidaru
 int robot::processThisLidar(LaserMeasurement laserData)
 {
 
-
+    if(startLoging==true)
+    {
+        std::ofstream robotlog;
+        robotlog.open("laser.log",std::ios::app);
+        for(int i=0;i<laserData.numberOfScans;i++)
+        {
+            robotlog<<laserData.Data[i].timestamp<<" "<<laserData.Data[i].scanDistance<<" "<<laserData.Data[i].scanAngle<<" "<<laserData.Data[i].scanQuality<<std::endl;
+        }
+        robotlog.close();
+    }
     memcpy( &copyOfLaserData,&laserData,sizeof(LaserMeasurement));
     //tu mozete robit s datami z lidaru.. napriklad najst prekazky, zapisat do mapy. naplanovat ako sa prekazke vyhnut.
     // ale nic vypoctovo narocne - to iste vlakno ktore cita data z lidaru

@@ -19,6 +19,10 @@ greaterThan(QT_MAJOR_VERSION, 5) {
     DEFINES += USING_QT5
 }
 
+message(INCLUDUJEM AMCL)
+INCLUDEPATH +=$$PWD/../amcl/include
+LIBS += -L$$PWD/../amcl/lib -lamcl
+
 !contains(DEFINES, DISABLE_OPENCV) {
 
     win32 {
