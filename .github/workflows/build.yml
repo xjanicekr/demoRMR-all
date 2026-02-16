@@ -2,7 +2,9 @@ name: Build Library
 
 on:
   push:
+    branches: [ main ]
   pull_request:
+    branches: [ main ]
 
 jobs:
   build:
@@ -16,53 +18,20 @@ jobs:
       QT_VERSION: 6.8.0
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
       # -----------------------
-      # Set up Python (for aqtinstall on Windows)
-      # -----------------------
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: 3.11
-
-      - name: Upgrade pip
-        run: python -m pip install --upgrade pip
-
-      # -----------------------
-      # Install Qt
+      # Install Qt (Standardized)
       # -----------------------
       - name: Install Qt
-        shell: bash
-        run: |
-          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-            pip install aqtinstall
-            OUTPUT_DIR=C:/Qt
-            ARCH=win64_msvc2022_64
-            HOST=windows
-            MODULES="qtbase"
-            python -m aqt install-qt $HOST desktop ${{ env.QT_VERSION }} $ARCH --outputdir $OUTPUT_DIR --modules $MODULES
-          elif [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
-            sudo apt-get update
-            sudo apt-get install -y qt6-base-dev build-essential
-          else
-            brew update
-            brew install qt
-          fi
-
-      # -----------------------
-      # Add Qt to PATH
-      # -----------------------
-      - name: Add Qt to PATH
-        shell: bash
-        run: |
-          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-            echo "C:/Qt/${{ env.QT_VERSION }}/msvc_64/bin" >> $GITHUB_PATH
-          elif [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
-            echo "/usr/lib/$(ls /usr/lib | grep qt6)/bin" >> $GITHUB_PATH
-          else
-            echo "/usr/local/opt/qt/bin" >> $GITHUB_PATH
-          fi
+        uses: jurplel/install-qt-action@v3
+        with:
+          version: ${{ env.QT_VERSION }}
+          # Automatically selects the right host/arch based on the runner
+          host: ${{ matrix.os == 'windows-latest' && 'windows' || (matrix.os == 'macos-latest' && 'mac' || 'linux') }}
+          arch: ${{ matrix.os == 'windows-latest' && 'win64_msvc2022_64' || '' }}
+          # This action automatically adds Qt to PATH
 
       - name: Display Qt version
         run: qmake --version
@@ -72,7 +41,9 @@ jobs:
       # -----------------------
       - name: Install OpenCV (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
-        run: sudo apt-get install -y libopencv-dev
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libopencv-dev
 
       - name: Install OpenCV (macOS)
         if: matrix.os == 'macos-latest'
@@ -89,20 +60,20 @@ jobs:
         if: matrix.os != 'windows-latest'
         run: |
           cd librobot
-
+          
           # Release build
           qmake CONFIG+=release
           make -j$(nproc)
-          SO_FILE=$(find . -name "liblibrobot.so*" | head -n1)
-          mkdir -p ../build/release
-          cp $SO_FILE ../build/release/
-
+          
           # Debug build
           qmake CONFIG+=debug
           make -j$(nproc)
-          SO_FILE=$(find . -name "liblibrobot.so*" | head -n1)
-          mkdir -p ../build/debug
-          cp $SO_FILE ../build/debug/
+          
+          # Move artifacts to a predictable location for upload
+          mkdir -p ../artifacts/release
+          mkdir -p ../artifacts/debug
+          find . -name "liblibrobot.so*" -exec cp {} ../artifacts/release/ \; || true
+          find . -name "liblibrobot.dylib*" -exec cp {} ../artifacts/release/ \; || true
 
       # -----------------------
       # Build Windows MSVC 2022
@@ -110,26 +81,27 @@ jobs:
       - name: Setup MSVC 2022 environment
         if: matrix.os == 'windows-latest'
         uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: x64
-          vs-version: '17.0'
 
       - name: Build (Windows MSVC)
         if: matrix.os == 'windows-latest'
+        shell: cmd
+        env:
+          # Chocolatey installs OpenCV here; qmake needs to know where to find headers/libs
+          OpenCV_DIR: C:\tools\opencv\build
         run: |
           cd librobot
-
-          # Release
-          qmake -spec win32-msvc CONFIG+=release
+          
+          :: Release
+          qmake CONFIG+=release
           nmake
-          mkdir build\release
-          copy /y robotlib.dll build\release\
+          if not exist "..\artifacts\release" mkdir "..\artifacts\release"
+          copy /y robotlib.dll ..\artifacts\release\
 
-          # Debug
-          qmake -spec win32-msvc CONFIG+=debug
+          :: Debug
+          qmake CONFIG+=debug
           nmake
-          mkdir build\debug
-          copy /y robotlib.dll build\debug\robotlib_d.dll
+          if not exist "..\artifacts\debug" mkdir "..\artifacts\debug"
+          copy /y robotlib.dll ..\artifacts\debug\robotlib_d.dll
 
       # -----------------------
       # Upload Artifacts
@@ -138,6 +110,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: robotlib-${{ matrix.os }}
-          path: |
-            build/release/*
-            build/debug/*
+          path: artifacts/
