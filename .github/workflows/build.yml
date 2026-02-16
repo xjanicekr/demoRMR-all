@@ -51,7 +51,7 @@ jobs:
       - name: Install Qt
         uses: jurplel/install-qt-action@v3
         with:
-          version: '6.6.0'       # change to Qt5 if needed
+          version: '6.5.2'
           host: ${{ steps.qt-host.outputs.host }}
           target: desktop
           arch: ${{ steps.qt-arch.outputs.arch }}
