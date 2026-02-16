@@ -33,7 +33,7 @@ jobs:
         run: pip install aqtinstall
 
       # -----------------------
-      # Install Qt using aqtinstall (Windows: qtbase module, Linux/macOS: default)
+      # Install Qt using aqtinstall
       # -----------------------
       - name: Install Qt
         shell: bash
@@ -47,12 +47,12 @@ jobs:
             OUTPUT_DIR=$HOME/Qt
             ARCH=gcc_64
             HOST=linux
-            MODULES=""
+            MODULES=""  # omit modules on Linux
           else
             OUTPUT_DIR=$HOME/Qt
             ARCH=clang_64
             HOST=mac
-            MODULES=""
+            MODULES=""  # omit modules on macOS
           fi
 
           if [[ -z "$MODULES" ]]; then
