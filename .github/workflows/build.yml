@@ -12,49 +12,84 @@ jobs:
 
     runs-on: ${{ matrix.os }}
 
+    env:
+      QT_VERSION: 6.8.0
+      QT_MODULES: qtbase
+
     steps:
       - uses: actions/checkout@v4
 
       # -----------------------
-      # Map GitHub OS to Qt host
+      # Set up Python (needed for aqtinstall)
       # -----------------------
-      - name: Set Qt host
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.11
+
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip
+
+      - name: Install aqtinstall
+        run: pip install aqtinstall
+
+      # -----------------------
+      # Set Qt host and arch
+      # -----------------------
+      - name: Set Qt host and arch
+        id: qt-vars
         shell: bash
-        id: qt-host
         run: |
           if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
             echo "host=windows" >> $GITHUB_OUTPUT
-          elif [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
-            echo "host=linux" >> $GITHUB_OUTPUT
-          else
-            echo "host=mac" >> $GITHUB_OUTPUT
-          fi
-
-      # -----------------------
-      # Map GitHub OS to Qt arch
-      # -----------------------
-      - name: Set Qt arch
-        shell: bash
-        id: qt-arch
-        run: |
-          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
             echo "arch=win64_msvc2022_64" >> $GITHUB_OUTPUT
           elif [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
+            echo "host=linux" >> $GITHUB_OUTPUT
             echo "arch=gcc_64" >> $GITHUB_OUTPUT
           else
+            echo "host=mac" >> $GITHUB_OUTPUT
             echo "arch=clang_64" >> $GITHUB_OUTPUT
           fi
 
       # -----------------------
-      # Install Qt
+      # Install Qt via aqtinstall
       # -----------------------
       - name: Install Qt
-        uses: jurplel/install-qt-action@v3
-        with:
-          version: '6.5.2'
-          host: ${{ steps.qt-host.outputs.host }}
-          target: desktop
-          arch: ${{ steps.qt-arch.outputs.arch }}
+        run: |
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            OUTPUT_DIR=C:/Qt
+          else
+            OUTPUT_DIR=$HOME/Qt
+          fi
+
+          python -m aqt install-qt \
+            ${{ steps.qt-vars.outputs.host }} \
+            desktop \
+            ${{ env.QT_VERSION }} \
+            ${{ steps.qt-vars.outputs.arch }} \
+            --outputdir $OUTPUT_DIR \
+            --modules ${{ env.QT_MODULES }} \
+            --verbose
+
+      # -----------------------
+      # Add Qt bin to PATH
+      # -----------------------
+      - name: Add Qt to PATH
+        shell: bash
+        run: |
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            QT_BIN=C:/Qt/${{ env.QT_VERSION }}/msvc_64/bin
+            echo "$QT_BIN" >> $GITHUB_PATH
+          else
+            QT_BIN=$HOME/Qt/${{ env.QT_VERSION }}/gcc_64/bin
+            if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
+              QT_BIN=$HOME/Qt/${{ env.QT_VERSION }}/clang_64/bin
+            fi
+            echo "$QT_BIN" >> $GITHUB_PATH
+          fi
+
+      - name: Display Qt version
+        run: qmake --version
 
       # -----------------------
       # Install OpenCV
@@ -97,7 +132,7 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
-          vs-version: '17.0'   # MSVC 2022
+          vs-version: '17.0'
 
       - name: Build (Windows MSVC)
         if: matrix.os == 'windows-latest'
