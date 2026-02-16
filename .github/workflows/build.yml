@@ -20,16 +20,14 @@ jobs:
         uses: actions/checkout@v4
 
       # -----------------------
-      # Install Qt (Standardized)
+      # Install Qt
       # -----------------------
       - name: Install Qt
         uses: jurplel/install-qt-action@v3
         with:
           version: ${{ env.QT_VERSION }}
-          # Automatically selects the right host/arch based on the runner
           host: ${{ matrix.os == 'windows-latest' && 'windows' || (matrix.os == 'macos-latest' && 'mac' || 'linux') }}
           arch: ${{ matrix.os == 'windows-latest' && 'win64_msvc2022_64' || '' }}
-          # This action automatically adds Qt to PATH
 
       - name: Display Qt version
         run: qmake --version
@@ -67,11 +65,13 @@ jobs:
           qmake CONFIG+=debug
           make -j$(nproc)
           
-          # Move artifacts to a predictable location for upload
+          # Prepare artifact directory
           mkdir -p ../artifacts/release
           mkdir -p ../artifacts/debug
-          find . -name "liblibrobot.so*" -exec cp {} ../artifacts/release/ \; || true
-          find . -name "liblibrobot.dylib*" -exec cp {} ../artifacts/release/ \; || true
+          
+          # Use find to grab the .so or .dylib regardless of exact versioning
+          find .. -name "liblibrobot.so*" -exec cp {} ../artifacts/release/ \; || true
+          find .. -name "liblibrobot.dylib*" -exec cp {} ../artifacts/release/ \; || true
 
       # -----------------------
       # Build Windows MSVC 2022
@@ -84,22 +84,26 @@ jobs:
         if: matrix.os == 'windows-latest'
         shell: cmd
         env:
-          # Chocolatey installs OpenCV here; qmake needs to know where to find headers/libs
           OpenCV_DIR: C:\tools\opencv\build
         run: |
           cd librobot
           
-          :: Release
+          :: --- Release Build ---
           qmake CONFIG+=release
           nmake
           if not exist "..\artifacts\release" mkdir "..\artifacts\release"
-          copy /y robotlib.dll ..\artifacts\release\
+          :: Note: Based on your log, the file is in ..\bin\ and named librobot.dll
+          copy /y "..\bin\librobot.dll" "..\artifacts\release\"
+          copy /y "..\bin\librobot.lib" "..\artifacts\release\"
 
-          :: Debug
+          :: --- Debug Build ---
+          :: We clean to ensure we don't mix release/debug object files
+          nmake clean
           qmake CONFIG+=debug
           nmake
           if not exist "..\artifacts\debug" mkdir "..\artifacts\debug"
-          copy /y robotlib.dll ..\artifacts\debug\robotlib_d.dll
+          copy /y "..\bin\librobot.dll" "..\artifacts\debug\librobot_d.dll"
+          copy /y "..\bin\librobot.lib" "..\artifacts\debug\librobot_d.lib"
 
       # -----------------------
       # Upload Artifacts
