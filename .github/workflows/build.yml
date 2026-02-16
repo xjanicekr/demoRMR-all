@@ -25,18 +25,15 @@ jobs:
         shell: bash
         run: |
           if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-            # Windows: use aqtinstall
             python -m pip install --upgrade pip
             pip install aqtinstall
             OUTPUT_DIR=C:/Qt
             # Install base Qt only (qtbase included by default)
             python -m aqt install-qt windows desktop ${{ env.QT_VERSION }} win64_msvc2022_64 --outputdir $OUTPUT_DIR
           elif [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
-            # Linux: use system packages
             sudo apt-get update
             sudo apt-get install -y qt6-base-dev qt6-base-dev-tools build-essential
           else
-            # macOS: use brew
             brew update
             brew install qt@6
           fi
@@ -86,13 +83,13 @@ jobs:
           qmake CONFIG+=release
           make -j$(nproc)
           mkdir -p build/release
-          cp librobot.so build/release/
+          cp liblibrobot.so build/release/
 
           # Debug
           qmake CONFIG+=debug
           make -j$(nproc)
           mkdir -p build/debug
-          cp librobot.so build/debug/librobot_d.so
+          cp liblibrobot.so build/debug/liblibrobot_d.so
 
       # -----------------------
       # Build Windows MSVC 2022
