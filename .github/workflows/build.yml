@@ -14,7 +14,6 @@ jobs:
 
     env:
       QT_VERSION: 6.8.0
-      QT_MODULES: qtbase
 
     steps:
       - uses: actions/checkout@v4
@@ -34,7 +33,7 @@ jobs:
         run: pip install aqtinstall
 
       # -----------------------
-      # Install Qt using aqtinstall
+      # Install Qt using aqtinstall (Windows: qtbase module, Linux/macOS: default)
       # -----------------------
       - name: Install Qt
         shell: bash
@@ -43,19 +42,24 @@ jobs:
             OUTPUT_DIR=C:/Qt
             ARCH=win64_msvc2022_64
             HOST=windows
+            MODULES="qtbase"
           elif [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
             OUTPUT_DIR=$HOME/Qt
             ARCH=gcc_64
             HOST=linux
+            MODULES=""
           else
             OUTPUT_DIR=$HOME/Qt
             ARCH=clang_64
             HOST=mac
+            MODULES=""
           fi
 
-          python -m aqt install-qt $HOST desktop ${{ env.QT_VERSION }} $ARCH \
-            --outputdir $OUTPUT_DIR \
-            --modules ${{ env.QT_MODULES }}
+          if [[ -z "$MODULES" ]]; then
+            python -m aqt install-qt $HOST desktop ${{ env.QT_VERSION }} $ARCH --outputdir $OUTPUT_DIR
+          else
+            python -m aqt install-qt $HOST desktop ${{ env.QT_VERSION }} $ARCH --outputdir $OUTPUT_DIR --modules $MODULES
+          fi
 
       # -----------------------
       # Add Qt bin to PATH
