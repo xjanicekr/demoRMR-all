@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@v4
 
       # -----------------------
-      # Set up Python (needed for aqtinstall)
+      # Set up Python (for aqtinstall)
       # -----------------------
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -34,42 +34,28 @@ jobs:
         run: pip install aqtinstall
 
       # -----------------------
-      # Set Qt host and arch
+      # Install Qt using aqtinstall
       # -----------------------
-      - name: Set Qt host and arch
-        id: qt-vars
+      - name: Install Qt
         shell: bash
         run: |
           if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-            echo "host=windows" >> $GITHUB_OUTPUT
-            echo "arch=win64_msvc2022_64" >> $GITHUB_OUTPUT
-          elif [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
-            echo "host=linux" >> $GITHUB_OUTPUT
-            echo "arch=gcc_64" >> $GITHUB_OUTPUT
-          else
-            echo "host=mac" >> $GITHUB_OUTPUT
-            echo "arch=clang_64" >> $GITHUB_OUTPUT
-          fi
-
-      # -----------------------
-      # Install Qt via aqtinstall
-      # -----------------------
-      - name: Install Qt
-        run: |
-          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
             OUTPUT_DIR=C:/Qt
+            ARCH=win64_msvc2022_64
+            HOST=windows
+          elif [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
+            OUTPUT_DIR=$HOME/Qt
+            ARCH=gcc_64
+            HOST=linux
           else
             OUTPUT_DIR=$HOME/Qt
+            ARCH=clang_64
+            HOST=mac
           fi
 
-          python -m aqt install-qt \
-            ${{ steps.qt-vars.outputs.host }} \
-            desktop \
-            ${{ env.QT_VERSION }} \
-            ${{ steps.qt-vars.outputs.arch }} \
+          python -m aqt install-qt $HOST desktop ${{ env.QT_VERSION }} $ARCH \
             --outputdir $OUTPUT_DIR \
-            --modules ${{ env.QT_MODULES }} \
-            --verbose
+            --modules ${{ env.QT_MODULES }}
 
       # -----------------------
       # Add Qt bin to PATH
@@ -80,11 +66,11 @@ jobs:
           if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
             QT_BIN=C:/Qt/${{ env.QT_VERSION }}/msvc_64/bin
             echo "$QT_BIN" >> $GITHUB_PATH
-          else
+          elif [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
             QT_BIN=$HOME/Qt/${{ env.QT_VERSION }}/gcc_64/bin
-            if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
-              QT_BIN=$HOME/Qt/${{ env.QT_VERSION }}/clang_64/bin
-            fi
+            echo "$QT_BIN" >> $GITHUB_PATH
+          else
+            QT_BIN=$HOME/Qt/${{ env.QT_VERSION }}/clang_64/bin
             echo "$QT_BIN" >> $GITHUB_PATH
           fi
 
