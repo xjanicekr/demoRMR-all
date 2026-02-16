@@ -16,13 +16,27 @@ jobs:
       - uses: actions/checkout@v4
 
       # -----------------------
+      # Map GitHub OS to Qt host
+      # -----------------------
+      - name: Set Qt host
+        id: qt-host
+        run: |
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            echo "host=windows" >> $GITHUB_OUTPUT
+          elif [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
+            echo "host=linux" >> $GITHUB_OUTPUT
+          else
+            echo "host=mac" >> $GITHUB_OUTPUT
+          fi
+
+      # -----------------------
       # Install Qt
       # -----------------------
       - name: Install Qt
         uses: jurplel/install-qt-action@v3
         with:
-          version: '6.6.0'       # change to your Qt5 if needed
-          host: ${{ matrix.os }}
+          version: '6.6.0'       # change to Qt5 if needed
+          host: ${{ steps.qt-host.outputs.host }}
           target: desktop
           arch: ${{ matrix.os == 'windows-latest' && 'win64_msvc2022_64' || 'x64' }}
 
@@ -75,13 +89,13 @@ jobs:
           # Release
           qmake -spec win32-msvc CONFIG+=release
           nmake
-          mkdir -p build/release
+          mkdir build\release
           copy /y robotlib.dll build\release\
 
           # Debug
           qmake -spec win32-msvc CONFIG+=debug
           nmake
-          mkdir -p build/debug
+          mkdir build\debug
           copy /y robotlib.dll build\debug\robotlib_d.dll
 
       # -----------------------
