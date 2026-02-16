@@ -28,7 +28,6 @@ jobs:
             python -m pip install --upgrade pip
             pip install aqtinstall
             OUTPUT_DIR=C:/Qt
-            # Install base Qt only (qtbase included by default)
             python -m aqt install-qt windows desktop ${{ env.QT_VERSION }} win64_msvc2022_64 --outputdir $OUTPUT_DIR
           elif [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
             sudo apt-get update
@@ -79,17 +78,18 @@ jobs:
       - name: Build (Linux/macOS)
         if: matrix.os != 'windows-latest'
         run: |
-          # Release
+          cd librobot
+          # Release build
           qmake CONFIG+=release
           make -j$(nproc)
-          mkdir -p build/release
-          cp liblibrobot.so build/release/
+          mkdir -p ../build/release
+          cp liblibrobot.so* ../build/release/
 
-          # Debug
+          # Debug build
           qmake CONFIG+=debug
           make -j$(nproc)
-          mkdir -p build/debug
-          cp liblibrobot.so build/debug/liblibrobot_d.so
+          mkdir -p ../build/debug
+          cp liblibrobot.so* ../build/debug/
 
       # -----------------------
       # Build Windows MSVC 2022
@@ -104,6 +104,7 @@ jobs:
       - name: Build (Windows MSVC)
         if: matrix.os == 'windows-latest'
         run: |
+          cd librobot
           # Release
           qmake -spec win32-msvc CONFIG+=release
           nmake
@@ -117,7 +118,7 @@ jobs:
           copy /y robotlib.dll build\debug\robotlib_d.dll
 
       # -----------------------
-      # Upload Artifacts
+      # Upload Build Artifacts
       # -----------------------
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
