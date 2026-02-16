@@ -19,46 +19,27 @@ jobs:
       - uses: actions/checkout@v4
 
       # -----------------------
-      # Set up Python (for aqtinstall)
-      # -----------------------
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: 3.11
-
-      - name: Upgrade pip
-        run: python -m pip install --upgrade pip
-
-      - name: Install aqtinstall
-        run: pip install aqtinstall
-
-      # -----------------------
-      # Install Qt using aqtinstall
+      # Install Qt
       # -----------------------
       - name: Install Qt
         shell: bash
         run: |
           if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            # Use aqtinstall on Windows
+            python -m pip install --upgrade pip
+            pip install aqtinstall
             OUTPUT_DIR=C:/Qt
             ARCH=win64_msvc2022_64
-            HOST=windows
             MODULES="qtbase"
+            python -m aqt install-qt windows desktop ${{ env.QT_VERSION }} $ARCH --outputdir $OUTPUT_DIR --modules $MODULES
           elif [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
-            OUTPUT_DIR=$HOME/Qt
-            ARCH=gcc_64
-            HOST=linux
-            MODULES=""  # omit modules on Linux
+            # Linux: Use system packages / prebuilt binaries
+            sudo apt-get update
+            sudo apt-get install -y qt6-base-dev qt6-base-dev-tools
           else
-            OUTPUT_DIR=$HOME/Qt
-            ARCH=clang_64
-            HOST=mac
-            MODULES=""  # omit modules on macOS
-          fi
-
-          if [[ -z "$MODULES" ]]; then
-            python -m aqt install-qt $HOST desktop ${{ env.QT_VERSION }} $ARCH --outputdir $OUTPUT_DIR
-          else
-            python -m aqt install-qt $HOST desktop ${{ env.QT_VERSION }} $ARCH --outputdir $OUTPUT_DIR --modules $MODULES
+            # macOS: Use brew
+            brew update
+            brew install qt@6
           fi
 
       # -----------------------
@@ -71,10 +52,10 @@ jobs:
             QT_BIN=C:/Qt/${{ env.QT_VERSION }}/msvc_64/bin
             echo "$QT_BIN" >> $GITHUB_PATH
           elif [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
-            QT_BIN=$HOME/Qt/${{ env.QT_VERSION }}/gcc_64/bin
+            QT_BIN=/usr/lib/$(ls /usr/lib | grep qt6)/bin
             echo "$QT_BIN" >> $GITHUB_PATH
           else
-            QT_BIN=$HOME/Qt/${{ env.QT_VERSION }}/clang_64/bin
+            QT_BIN=/usr/local/opt/qt@6/bin
             echo "$QT_BIN" >> $GITHUB_PATH
           fi
 
@@ -86,7 +67,7 @@ jobs:
       # -----------------------
       - name: Install OpenCV (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
-        run: sudo apt-get update && sudo apt-get install -y libopencv-dev build-essential
+        run: sudo apt-get install -y libopencv-dev build-essential
 
       - name: Install OpenCV (macOS)
         if: matrix.os == 'macos-latest'
