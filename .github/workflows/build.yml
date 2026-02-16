@@ -30,6 +30,20 @@ jobs:
           fi
 
       # -----------------------
+      # Map GitHub OS to Qt arch
+      # -----------------------
+      - name: Set Qt arch
+        id: qt-arch
+        run: |
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            echo "arch=win64_msvc2022_64" >> $GITHUB_OUTPUT
+          elif [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
+            echo "arch=gcc_64" >> $GITHUB_OUTPUT
+          else
+            echo "arch=clang_64" >> $GITHUB_OUTPUT
+          fi
+
+      # -----------------------
       # Install Qt
       # -----------------------
       - name: Install Qt
@@ -38,7 +52,7 @@ jobs:
           version: '6.6.0'       # change to Qt5 if needed
           host: ${{ steps.qt-host.outputs.host }}
           target: desktop
-          arch: ${{ matrix.os == 'windows-latest' && 'win64_msvc2022_64' || 'x64' }}
+          arch: ${{ steps.qt-arch.outputs.arch }}
 
       # -----------------------
       # Install OpenCV
