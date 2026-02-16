@@ -1,0 +1,96 @@
+name: Build Library
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # -----------------------
+      # Install Qt
+      # -----------------------
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v3
+        with:
+          version: '6.6.0'       # change to your Qt5 if needed
+          host: ${{ matrix.os }}
+          target: desktop
+          arch: ${{ matrix.os == 'windows-latest' && 'win64_msvc2022_64' || 'x64' }}
+
+      # -----------------------
+      # Install OpenCV
+      # -----------------------
+      - name: Install OpenCV (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y libopencv-dev build-essential
+
+      - name: Install OpenCV (macOS)
+        if: matrix.os == 'macos-latest'
+        run: brew install opencv
+
+      - name: Install OpenCV (Windows)
+        if: matrix.os == 'windows-latest'
+        run: choco install opencv --version=4.5.5
+
+      # -----------------------
+      # Build Linux / macOS
+      # -----------------------
+      - name: Build (Linux/macOS)
+        if: matrix.os != 'windows-latest'
+        run: |
+          # Release
+          qmake CONFIG+=release
+          make -j$(nproc)
+          mkdir -p build/release
+          cp librobot.so build/release/
+
+          # Debug
+          qmake CONFIG+=debug
+          make -j$(nproc)
+          mkdir -p build/debug
+          cp librobot.so build/debug/librobot_d.so
+
+      # -----------------------
+      # Build Windows MSVC 2022
+      # -----------------------
+      - name: Setup MSVC 2022 environment
+        if: matrix.os == 'windows-latest'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+          vs-version: '17.0'   # MSVC 2022
+
+      - name: Build (Windows MSVC)
+        if: matrix.os == 'windows-latest'
+        run: |
+          # Release
+          qmake -spec win32-msvc CONFIG+=release
+          nmake
+          mkdir -p build/release
+          copy /y robotlib.dll build\release\
+
+          # Debug
+          qmake -spec win32-msvc CONFIG+=debug
+          nmake
+          mkdir -p build/debug
+          copy /y robotlib.dll build\debug\robotlib_d.dll
+
+      # -----------------------
+      # Upload Artifacts
+      # -----------------------
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: robotlib-${{ matrix.os }}
+          path: |
+            build/release/*
+            build/debug/*
