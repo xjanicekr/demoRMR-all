@@ -19,6 +19,7 @@ jobs:
       # Map GitHub OS to Qt host
       # -----------------------
       - name: Set Qt host
+        shell: bash
         id: qt-host
         run: |
           if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
@@ -33,6 +34,7 @@ jobs:
       # Map GitHub OS to Qt arch
       # -----------------------
       - name: Set Qt arch
+        shell: bash
         id: qt-arch
         run: |
           if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
