@@ -25,19 +25,18 @@ jobs:
         shell: bash
         run: |
           if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-            # Use aqtinstall on Windows
+            # Windows: use aqtinstall
             python -m pip install --upgrade pip
             pip install aqtinstall
             OUTPUT_DIR=C:/Qt
-            ARCH=win64_msvc2022_64
-            MODULES="qtbase"
-            python -m aqt install-qt windows desktop ${{ env.QT_VERSION }} $ARCH --outputdir $OUTPUT_DIR --modules $MODULES
+            # Install base Qt only (qtbase included by default)
+            python -m aqt install-qt windows desktop ${{ env.QT_VERSION }} win64_msvc2022_64 --outputdir $OUTPUT_DIR
           elif [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
-            # Linux: Use system packages / prebuilt binaries
+            # Linux: use system packages
             sudo apt-get update
-            sudo apt-get install -y qt6-base-dev qt6-base-dev-tools
+            sudo apt-get install -y qt6-base-dev qt6-base-dev-tools build-essential
           else
-            # macOS: Use brew
+            # macOS: use brew
             brew update
             brew install qt@6
           fi
