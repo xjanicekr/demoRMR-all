@@ -46,6 +46,10 @@ private:
   double x;
   double y;
   double fi;
+
+  unsigned short prev_enc_R = 0;
+  unsigned short prev_enc_L = 0;
+  bool is_inicialized = false;
   ///-----------------------------
   /// toto su rychlosti ktore sa nastavuju setSpeedVal a posielaju v
   /// processThisRobot

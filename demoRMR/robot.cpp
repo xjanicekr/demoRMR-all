@@ -57,9 +57,44 @@ void robot::setSpeed(double forw, double rots)
 int robot::processThisRobot(const TKobukiData &robotdata)
 {
 
-
     ///tu mozete robit s datami z robota
+    long double tickToMeter = 0.000085292090497737556558;
+    long double b = 0.23;
 
+    if (is_inicialized == false){
+        prev_enc_R = robotdata.EncoderRight;
+        prev_enc_L = robotdata.EncoderLeft;
+        is_inicialized = true;
+    }
+    else{
+        short ticks_R = (short)(robotdata.EncoderRight - prev_enc_R);
+        short ticks_L = (short)(robotdata.EncoderLeft - prev_enc_L);
+
+        double diff_R = ticks_R * tickToMeter;
+        double diff_L = ticks_L * tickToMeter;
+
+        double delta_alpha = (diff_R - diff_L) / b;
+        double fi_new = fi + delta_alpha;
+
+        if (std::abs(diff_R - diff_L) < 0.000001){
+            double d_center = (diff_L + diff_R) / 2.0;
+            x += d_center * cos(fi);
+            y += d_center * sin(fi);
+        }
+        else{
+            double zlomok = (b * (diff_R + diff_L)) / (2.0 * (diff_R - diff_L));
+            x = x + zlomok * (sin(fi_new) - sin(fi));
+            y = y - zlomok * (cos(fi_new) - cos(fi));
+        }
+
+        fi = fi_new;
+
+        while(fi > PI) fi -= 2.0 * PI;
+        while(fi < -PI) fi += 2.0 * PI;
+
+        prev_enc_R = robotdata.EncoderRight;
+        prev_enc_L = robotdata.EncoderLeft;
+    }
 
 
 
@@ -69,6 +104,9 @@ int robot::processThisRobot(const TKobukiData &robotdata)
     if(datacounter%5==0)
     {
 
+        double fi_degrees = fi * (180.0 / PI);
+        emit publishPosition(x, y, fi_degrees);
+
         ///ak nastavite hodnoty priamo do prvkov okna,ako je to na tychto zakomentovanych riadkoch tak sa moze stat ze vam program padne
         // ui->lineEdit_2->setText(QString::number(robotdata.EncoderRight));
         //ui->lineEdit_3->setText(QString::number(robotdata.EncoderLeft));
@@ -77,12 +115,13 @@ int robot::processThisRobot(const TKobukiData &robotdata)
         /// okno pocuva vo svojom slote a vasu premennu nastavi tak ako chcete. prikaz emit to presne takto spravi
         /// viac o signal slotoch tu: https://doc.qt.io/qt-5/signalsandslots.html
         ///posielame sem nezmysli.. pohrajte sa nech sem idu zmysluplne veci
-        emit publishPosition(robotdata.EncoderLeft,y,fi);
+        //emit publishPosition(robotdata.EncoderLeft,y,fi);
         ///toto neodporucam na nejake komplikovane struktury.signal slot robi kopiu dat. radsej vtedy posielajte
         /// prazdny signal a slot bude vykreslovat strukturu (vtedy ju musite mat samozrejme ako member premmennu v mainwindow.ak u niekoho najdem globalnu premennu,tak bude cistit bludisko zubnou kefkou.. kefku dodam)
         /// vtedy ale odporucam pouzit mutex, aby sa vam nestalo ze budete pocas vypisovania prepisovat niekde inde
 
     }
+
     ///---tu sa posielaju rychlosti do robota... vklude zakomentujte ak si chcete spravit svoje
     if(useDirectCommands==0)
     {
