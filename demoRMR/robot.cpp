@@ -1,4 +1,6 @@
 #include "robot.h"
+#include <thread>
+#include <chrono>
 
 robot::robot(QObject *parent) : QObject(parent)
 {
@@ -54,6 +56,14 @@ void robot::setSpeed(double forw, double rots)
 
 ///toto je calback na data z robota, ktory ste podhodili robotu vo funkcii initAndStartRobot
 /// vola sa vzdy ked dojdu nove data z robota. nemusite nic riesit, proste sa to stane
+double previous_error = 0;
+double integral_fi = 0;
+double derivative_fi = 0;
+int dt = 10;   // 10 ms
+double previous_error_fi = 0;
+int Kp = 5;
+int Ki = 1;
+
 int robot::processThisRobot(const TKobukiData &robotdata)
 {
 
@@ -64,6 +74,8 @@ int robot::processThisRobot(const TKobukiData &robotdata)
     if (is_inicialized == false){
         prev_enc_R = robotdata.EncoderRight;
         prev_enc_L = robotdata.EncoderLeft;
+
+
         is_inicialized = true;
     }
     else{
@@ -94,6 +106,19 @@ int robot::processThisRobot(const TKobukiData &robotdata)
 
         prev_enc_R = robotdata.EncoderRight;
         prev_enc_L = robotdata.EncoderLeft;
+        printf("x:%f\n", x);
+        printf("y:%f\n", y);
+        printf("phi: %f\n", fi);
+        double fi_ref = 3.14;
+        double error_fi = fi_ref - fi;
+
+        integral_fi += error_fi * dt;
+        derivative_fi = (error_fi - previous_error_fi)/dt;
+        double output_fi = Kp*error_fi;
+        double previous_error_fi = error_fi;
+        std::this_thread::sleep_for(std::chrono::milliseconds(dt)); //wait
+        robotCom.setRotationSpeed(output_fi);
+
     }
 
 
