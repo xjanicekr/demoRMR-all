@@ -109,18 +109,78 @@ int robot::processThisRobot(const TKobukiData &robotdata)
         printf("x:%f\n", x);
         printf("y:%f\n", y);
         printf("phi: %f\n", fi);
-        double fi_ref = 3.14;
+
+        double x_ref = 1.0;
+        double y_ref = 0.5;
+
+        double Kp_rot = 2.5;
+        double Kp_trans = 400.0;
+
+        double pa1 = 0.1;
+        double pa2 = 0.4;
+        double dist_tol = 0.05;
+
+        static bool is_rotating = true;
+
+        static double last_rot_speed = 0.0;
+        static double last_trans_speed = 0.0;
+
+        double max_accel_rot = 0.5;
+        double max_accel_trans = 50.0;
+
+        double dx = x_ref - x;
+        double dy = y_ref - y;
+        double distance = std::sqrt(dx*dx + dy*dy);
+        double fi_ref = std::atan2(dy, dx);
+
         double error_fi = fi_ref - fi;
+        while(error_fi > PI) error_fi -= 2.0 * PI;
+        while(error_fi < -PI) error_fi += 2.0 * PI;
 
-        integral_fi += error_fi * dt;
-        derivative_fi = (error_fi - previous_error_fi)/dt;
-        double output_fi = Kp*error_fi;
-        double previous_error_fi = error_fi;
-        std::this_thread::sleep_for(std::chrono::milliseconds(dt)); //wait
-        robotCom.setRotationSpeed(output_fi);
+        double out_rot = 0.0;
+        double out_trans = 0.0;
 
+        if (distance > dist_tol){
+            if (is_rotating){
+                double target_rot = Kp_rot * error_fi;
+                if (target_rot > last_rot_speed + max_accel_rot){
+                    out_rot = last_rot_speed + max_accel_rot;
+                }else if (target_rot < last_rot_speed - max_accel_rot){
+                    out_rot = last_rot_speed - max_accel_rot;
+                }else{
+                    out_rot = target_rot;
+                }
+                out_trans = 0.0;
+                last_trans_speed = 0.0;
+                if (std::abs(error_fi) < pa1){
+                    is_rotating = false;
+                }
+            }else{
+                double target_trans = Kp_trans * distance;
+                if (target_trans > 400.0){
+                    target_trans = 400.0;
+                }
+                if (target_trans > last_trans_speed + max_accel_trans){
+                    out_trans = last_trans_speed + max_accel_trans;
+                }else if (target_trans < last_trans_speed - max_accel_trans){
+                    out_trans = last_trans_speed - max_accel_trans;
+                }else {
+                    out_trans = target_trans;
+                }
+                out_rot = 0.0;
+                last_rot_speed = 0.0;
+                if (std::abs(error_fi) > pa2){
+                    is_rotating = true;
+                }
+            }
+        }else{
+            out_rot = 0.0;
+            out_trans = 0.0;
+        }
+        forwardspeed = out_trans;
+        rotationspeed = out_rot;
+        useDirectCommands = 0;
     }
-
 
 
 ///TU PISTE KOD... TOTO JE TO MIESTO KED NEVIETE KDE ZACAT,TAK JE TO NAOZAJ TU. AK AJ TAK NEVIETE, SPYTAJTE SA CVICIACEHO MA TU NATO STRING KTORY DA DO HLADANIA XXX
