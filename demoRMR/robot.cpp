@@ -110,11 +110,11 @@ int robot::processThisRobot(const TKobukiData &robotdata)
         printf("y:%f\n", y);
         printf("phi: %f\n", fi);
 
-        double x_ref = 1.0;
-        double y_ref = 0.5;
+        double x_ref = 2.0;
+        double y_ref = 0.0;
 
         double Kp_rot = 2.5;
-        double Kp_trans = 400.0;
+        double Kp_trans = 600.0;
 
         double pa1 = 0.1;
         double pa2 = 0.4;
@@ -126,7 +126,7 @@ int robot::processThisRobot(const TKobukiData &robotdata)
         static double last_trans_speed = 0.0;
 
         double max_accel_rot = 0.5;
-        double max_accel_trans = 50.0;
+        double max_accel_trans = 100.0;
 
         double dx = x_ref - x;
         double dy = y_ref - y;
@@ -167,6 +167,7 @@ int robot::processThisRobot(const TKobukiData &robotdata)
                 }else {
                     out_trans = target_trans;
                 }
+                out_trans=out_trans<25?25:out_trans;
                 out_rot = 0.0;
                 last_rot_speed = 0.0;
                 if (std::abs(error_fi) > pa2){
@@ -177,6 +178,10 @@ int robot::processThisRobot(const TKobukiData &robotdata)
             out_rot = 0.0;
             out_trans = 0.0;
         }
+
+        last_trans_speed = out_trans;
+        last_rot_speed = out_rot;
+
         forwardspeed = out_trans;
         rotationspeed = out_rot;
         useDirectCommands = 0;
