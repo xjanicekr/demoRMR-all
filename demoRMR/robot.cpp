@@ -68,7 +68,6 @@ int robot::processThisRobot(const TKobukiData &robotdata)
         prev_enc_R = robotdata.EncoderRight;
         prev_enc_L = robotdata.EncoderLeft;
 
-
         is_inicialized = true;
     }
     else{
@@ -152,7 +151,6 @@ int robot::processThisRobot(const TKobukiData &robotdata)
             }else{
                 double target_trans;
                 target_trans = Kp_trans * distance;
-
                 if (target_trans > 400.0){
                     target_trans = 400.0;
                 }
@@ -161,8 +159,6 @@ int robot::processThisRobot(const TKobukiData &robotdata)
                 }else {
                     out_trans = target_trans;
                 }
-
-
                 out_trans=out_trans<25?25:out_trans;
                 out_rot = 0.0;
                 last_rot_speed = 0.0;
