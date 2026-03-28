@@ -56,13 +56,6 @@ void robot::setSpeed(double forw, double rots)
 
 ///toto je calback na data z robota, ktory ste podhodili robotu vo funkcii initAndStartRobot
 /// vola sa vzdy ked dojdu nove data z robota. nemusite nic riesit, proste sa to stane
-double previous_error = 0;
-double integral_fi = 0;
-double derivative_fi = 0;
-int dt = 10;   // 10 ms
-double previous_error_fi = 0;
-int Kp = 5;
-int Ki = 1;
 
 int robot::processThisRobot(const TKobukiData &robotdata)
 {
@@ -110,8 +103,8 @@ int robot::processThisRobot(const TKobukiData &robotdata)
         printf("y:%f\n", y);
         printf("phi: %f\n", fi);
 
-        double x_ref = 0;
-        double y_ref = 3;
+        double x_ref = 1;
+        double y_ref = 0.5;
 
         double Kp_rot = 0.8;
         double Kp_trans = 200.0;
@@ -132,7 +125,7 @@ int robot::processThisRobot(const TKobukiData &robotdata)
         double dy = y_ref - y;
         double distance = std::sqrt(dx*dx + dy*dy);
         double fi_ref = std::atan2(dy, dx);
-        double dist_perc = x *100 / x_ref;
+
 
         double error_fi = fi_ref - fi;
         while(error_fi > PI) error_fi -= 2.0 * PI;
@@ -165,8 +158,6 @@ int robot::processThisRobot(const TKobukiData &robotdata)
                 }
                 if (target_trans > last_trans_speed + max_accel_trans){
                     out_trans = last_trans_speed + max_accel_trans;
-                }else if (target_trans < last_trans_speed - max_accel_trans){
-                    out_trans = last_trans_speed - max_accel_trans;
                 }else {
                     out_trans = target_trans;
                 }
@@ -237,14 +228,64 @@ int robot::processThisRobot(const TKobukiData &robotdata)
 
 ///toto je calback na data z lidaru, ktory ste podhodili robotu vo funkcii initAndStartRobot
 /// vola sa ked dojdu nove data z lidaru
+
+int n = 360;
+double sigma = 360 /n;
+int c = 1;
+std::vector<double> Hp(n, 0.0);
+double a = 10.0;
+double b = 2.0;
+double rs = 300; //mm
+double max_dist = 3000; // mm
+double di;
+double mi;
+double gamma_i, alpha_i;
+int k_min, k_max;
+double tau_high = 20.0; // treba vyladit
+double tau_low = 10.0;
+double target_x = 2.0;
+double target_y = 3.0;
 int robot::processThisLidar(const std::vector<LaserData>& laserData)
 {
 
     copyOfLaserData=laserData;
-
     //tu mozete robit s datami z lidaru.. napriklad najst prekazky, zapisat do mapy. naplanovat ako sa prekazke vyhnut.
     // ale nic vypoctovo narocne - to iste vlakno ktore cita data z lidaru
    // updateLaserPicture=1;
+    for (size_t i = 0; i < copyOfLaserData.size(); ++i) {
+        di = copyOfLaserData[i].scanDistance;//in mm
+        if (di > 0.05 && di < max_dist) {
+            mi = a - b * di;
+            if (mi < 0) mi = 0;
+            gamma_i = std::asin(rs / di) * (180.0 / PI); //v stupnoch
+            alpha_i = copyOfLaserData[i].scanAngle;
+            k_min = std::floor((alpha_i - gamma_i) / sigma);
+            k_max = std::ceil((alpha_i + gamma_i) / sigma);
+            for (int k = k_min; k <= k_max; ++k) {
+                int k_norm = (k % n + n) % n;// normalizacia indexu (aby sme ostali v poli 0 az n-1)
+                Hp[k_norm] += mi; // hk = suma(mi)
+        }
+
+    }
+
+    //BINARIZACIA Hp -> Hb
+    std::vector<int> Hb(n, 0);
+    std::vector<int> prev_Hb(n, 0);
+    if (prev_Hb.size() != n) prev_Hb.resize(n, 0);
+
+    for (int k = 0; k < n; ++k) {
+        if (Hp[k] > tau_high) Hb[k] = 1;
+        else if (Hp[k] < tau_low) Hb[k] = 0;
+        else Hb[k] = prev_Hb[k];
+    }
+    prev_Hb = Hb;
+
+    //KANDIDATSKE SMERY
+    double dx = target_x - x;
+    double dy = target_y - y;
+    double angle_to_target = std::atan2(dy, dx) * (180.0 / PI);
+    double current_fi_deg = fi * (180.0 / PI);
+
     emit publishLidar(copyOfLaserData);
    // update();//tento prikaz prinuti prekreslit obrazovku.. zavola sa paintEvent funkcia
 
