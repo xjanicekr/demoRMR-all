@@ -57,6 +57,30 @@ void robot::setSpeed(double forw, double rots)
 ///toto je calback na data z robota, ktory ste podhodili robotu vo funkcii initAndStartRobot
 /// vola sa vzdy ked dojdu nove data z robota. nemusite nic riesit, proste sa to stane
 
+int n = 360;
+double sigma = 360.0 /n;
+int c = 1;
+double a = 10.0;
+double max_dist = 3000 ;
+double b = 2.0;
+double rs = 300; //mm
+ // mm
+double di;
+double mi;
+double gamma_i, alpha_i;
+int k_min, k_max;
+
+double tau_high = 20.0; // treba vyladit
+double tau_low = 10.0;
+
+double target_x = 3.0;
+double target_y = 3.0;
+
+std::vector<int> prev_Hb(360, 0);
+int previous_k = 0.0;
+double vfh_target_angle = 0.0;
+
+
 int robot::processThisRobot(const TKobukiData &robotdata)
 {
 
@@ -123,8 +147,9 @@ int robot::processThisRobot(const TKobukiData &robotdata)
         double dx = x_ref - x;
         double dy = y_ref - y;
         double distance = std::sqrt(dx*dx + dy*dy);
-        double fi_ref = std::atan2(dy, dx);
+        //double fi_ref = std::atan2(dy, dx);
 
+        double fi_ref = vfh_target_angle;
 
         double error_fi = fi_ref - fi;
         while(error_fi > PI) error_fi -= 2.0 * PI;
@@ -225,22 +250,6 @@ int robot::processThisRobot(const TKobukiData &robotdata)
 ///toto je calback na data z lidaru, ktory ste podhodili robotu vo funkcii initAndStartRobot
 /// vola sa ked dojdu nove data z lidaru
 
-int n = 360;
-double sigma = 360 /n;
-int c = 1;
-std::vector<double> Hp(n, 0.0);
-double a = 10.0;
-double b = 2.0;
-double rs = 300; //mm
-double max_dist = 3000; // mm
-double di;
-double mi;
-double gamma_i, alpha_i;
-int k_min, k_max;
-double tau_high = 20.0; // treba vyladit
-double tau_low = 10.0;
-double target_x = 2.0;
-double target_y = 3.0;
 int robot::processThisLidar(const std::vector<LaserData>& laserData)
 {
 
@@ -248,6 +257,9 @@ int robot::processThisLidar(const std::vector<LaserData>& laserData)
     //tu mozete robit s datami z lidaru.. napriklad najst prekazky, zapisat do mapy. naplanovat ako sa prekazke vyhnut.
     // ale nic vypoctovo narocne - to iste vlakno ktore cita data z lidaru
    // updateLaserPicture=1;
+
+    std::vector<double> Hp(n, 0.0);
+
     for (size_t i = 0; i < copyOfLaserData.size(); ++i) {
         di = copyOfLaserData[i].scanDistance;//in mm
         if (di > 0.05 && di < max_dist) {
@@ -260,14 +272,14 @@ int robot::processThisLidar(const std::vector<LaserData>& laserData)
             for (int k = k_min; k <= k_max; ++k) {
                 int k_norm = (k % n + n) % n;// normalizacia indexu (aby sme ostali v poli 0 az n-1)
                 Hp[k_norm] += mi; // hk = suma(mi)
+            }
         }
-
     }
 
     //BINARIZACIA Hp -> Hb
     std::vector<int> Hb(n, 0);
-    std::vector<int> prev_Hb(n, 0);
-    if (prev_Hb.size() != n) prev_Hb.resize(n, 0);
+    //std::vector<int> prev_Hb(n, 0);
+    //if (prev_Hb.size() != n) prev_Hb.resize(n, 0);
 
     for (int k = 0; k < n; ++k) {
         if (Hp[k] > tau_high) Hb[k] = 1;
@@ -282,9 +294,53 @@ int robot::processThisLidar(const std::vector<LaserData>& laserData)
     double angle_to_target = std::atan2(dy, dx) * (180.0 / PI);
     double current_fi_deg = fi * (180.0 / PI);
 
-    emit publishLidar(copyOfLaserData);
-   // update();//tento prikaz prinuti prekreslit obrazovku.. zavola sa paintEvent funkcia
+    double target_angle_rel = angle_to_target - current_fi_deg;
+    while(target_angle_rel > 180.0) target_angle_rel -= 360.0;
+    while(target_angle_rel < -180.0) target_angle_rel += 360.0;
+    if (target_angle_rel < 0) target_angle_rel += 360.0; // Prevod do 0-360 stupňov
 
+    int target_sector = std::round(target_angle_rel / sigma);
+    target_sector = (target_sector % n + n) % n;
+
+    // Jednoduché prejdenie kandidátov (voľných sektorov) a výpočet g(c)
+    double min_cost = 999999.0;
+    int best_sector = target_sector; // defaultne ideme na cieľ
+
+    for (int k = 0; k < n; ++k) {
+        if (Hb[k] == 0) { // Ak je sektor voľný
+            // Nákladová funkcia g(c) = u1*Delta(c, g) + u2*Delta(c, robot) + u3*Delta(c, k_t-1)
+            // u1 (cieľ) má najväčšiu váhu, u2 (natočenie) a u3 (predošlý krok) vyhladzujú jazdu
+            double mu1 = 5.0, mu2 = 2.0, mu3 = 1.0;
+
+            // Výpočet najkratších vzdialeností sektorov (Delta)
+            double delta_cg = std::abs(k - target_sector);
+            if (delta_cg > n/2.0) delta_cg = n - delta_cg;
+
+            double delta_crobot = std::abs(k - 0); // 0 je priamo vpred v lokálnom systéme
+            if (delta_crobot > n/2.0) delta_crobot = n - delta_crobot;
+
+            double delta_cprev = std::abs(k - previous_k);
+            if (delta_cprev > n/2.0) delta_cprev = n - delta_cprev;
+
+            double cost = mu1 * delta_cg + mu2 * delta_crobot + mu3 * delta_cprev;
+
+            if (cost < min_cost) {
+                min_cost = cost;
+                best_sector = k;
+            }
+        }
+    }
+
+    // Uloženie výsledku pre regulátor
+    previous_k = best_sector;
+    double chosen_angle_rel = best_sector * sigma;
+    if (chosen_angle_rel > 180.0) chosen_angle_rel -= 360.0; // Prevod znova na -180 až +180
+
+    // Vypočítame konečný globálny uhol, kam sa má robot otočiť
+    vfh_target_angle = fi + (chosen_angle_rel * PI / 180.0);
+
+    emit publishLidar(copyOfLaserData);
+    // update();//tento prikaz prinuti prekreslit obrazovku.. zavola sa paintEvent funkcia
 
     return 0;
 
