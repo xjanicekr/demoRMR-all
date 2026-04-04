@@ -126,8 +126,8 @@ int robot::processThisRobot(const TKobukiData &robotdata)
         printf("y:%f\n", y);
         printf("phi: %f\n", fi);
 
-        double x_ref = 1;
-        double y_ref = 0.5;
+        double x_ref = target_x;
+        double y_ref = target_y;
 
         double Kp_rot = 0.8;
         double Kp_trans = 200.0;
@@ -147,7 +147,6 @@ int robot::processThisRobot(const TKobukiData &robotdata)
         double dx = x_ref - x;
         double dy = y_ref - y;
         double distance = std::sqrt(dx*dx + dy*dy);
-        //double fi_ref = std::atan2(dy, dx);
 
         double fi_ref = vfh_target_angle;
 
@@ -260,84 +259,149 @@ int robot::processThisLidar(const std::vector<LaserData>& laserData)
 
     std::vector<double> Hp(n, 0.0);
 
-    for (size_t i = 0; i < copyOfLaserData.size(); ++i) {
-        di = copyOfLaserData[i].scanDistance;//in mm
-        if (di > 0.05 && di < max_dist) {
-            mi = a - b * di;
-            if (mi < 0) mi = 0;
-            gamma_i = std::asin(rs / di) * (180.0 / PI); //v stupnoch
-            alpha_i = copyOfLaserData[i].scanAngle;
-            k_min = std::floor((alpha_i - gamma_i) / sigma);
-            k_max = std::ceil((alpha_i + gamma_i) / sigma);
-            for (int k = k_min; k <= k_max; ++k) {
-                int k_norm = (k % n + n) % n;// normalizacia indexu (aby sme ostali v poli 0 az n-1)
-                Hp[k_norm] += mi; // hk = suma(mi)
-            }
+    for (size_t i = 0; i < copyOfLaserData.size(); ++i){
+        double di = copyOfLaserData[i].scanDistance; // mm
+        if (di < 50.0 || di > max_dist) continue;
+        // Váha prekážky - bližšia prekážka = väčšia váha
+        double mi = std::max(0.0, (max_dist - di) / max_dist);
+        // Pozor: lidar je ľavotočivý
+        // Toto je potrebné prípadne doladiť podľa reálneho zobrazenia
+        double alpha_i = -copyOfLaserData[i].scanAngle; // lokálny uhol robota
+        while (alpha_i < 0.0) alpha_i += 360.0;
+        while (alpha_i >= 360.0) alpha_i -= 360.0;
+        // Rozšírenie prekážky o bezpečnostný uhol
+        double ratio = rs / di;
+        if (ratio > 1.0) ratio = 1.0;
+        double gamma_i = std::asin(ratio) * 180.0 / PI;
+        int k_min = (int)std::floor((alpha_i - gamma_i) / sigma);
+        int k_max = (int)std::ceil ((alpha_i + gamma_i) / sigma);
+        for (int k = k_min; k <= k_max; ++k){
+            int k_norm = (k % n + n) % n;
+            Hp[k_norm] += mi;
         }
     }
 
-    //BINARIZACIA Hp -> Hb
+    // 2. Binarizácia s hysterézou
     std::vector<int> Hb(n, 0);
-    //std::vector<int> prev_Hb(n, 0);
-    //if (prev_Hb.size() != n) prev_Hb.resize(n, 0);
-
-    for (int k = 0; k < n; ++k) {
+    for (int k = 0; k < n; ++k)
+    {
         if (Hp[k] > tau_high) Hb[k] = 1;
         else if (Hp[k] < tau_low) Hb[k] = 0;
         else Hb[k] = prev_Hb[k];
     }
     prev_Hb = Hb;
-
-    //KANDIDATSKE SMERY
+    // 3. Uhol na cieľ v lokálnej sústave robota
     double dx = target_x - x;
     double dy = target_y - y;
-    double angle_to_target = std::atan2(dy, dx) * (180.0 / PI);
-    double current_fi_deg = fi * (180.0 / PI);
-
-    double target_angle_rel = angle_to_target - current_fi_deg;
-    while(target_angle_rel > 180.0) target_angle_rel -= 360.0;
-    while(target_angle_rel < -180.0) target_angle_rel += 360.0;
-    if (target_angle_rel < 0) target_angle_rel += 360.0; // Prevod do 0-360 stupňov
-
-    int target_sector = std::round(target_angle_rel / sigma);
-    target_sector = (target_sector % n + n) % n;
-
-    // Jednoduché prejdenie kandidátov (voľných sektorov) a výpočet g(c)
-    double min_cost = 999999.0;
-    int best_sector = target_sector; // defaultne ideme na cieľ
-
-    for (int k = 0; k < n; ++k) {
-        if (Hb[k] == 0) { // Ak je sektor voľný
-            // Nákladová funkcia g(c) = u1*Delta(c, g) + u2*Delta(c, robot) + u3*Delta(c, k_t-1)
-            // u1 (cieľ) má najväčšiu váhu, u2 (natočenie) a u3 (predošlý krok) vyhladzujú jazdu
-            double mu1 = 5.0, mu2 = 2.0, mu3 = 1.0;
-
-            // Výpočet najkratších vzdialeností sektorov (Delta)
-            double delta_cg = std::abs(k - target_sector);
-            if (delta_cg > n/2.0) delta_cg = n - delta_cg;
-
-            double delta_crobot = std::abs(k - 0); // 0 je priamo vpred v lokálnom systéme
-            if (delta_crobot > n/2.0) delta_crobot = n - delta_crobot;
-
-            double delta_cprev = std::abs(k - previous_k);
-            if (delta_cprev > n/2.0) delta_cprev = n - delta_cprev;
-
-            double cost = mu1 * delta_cg + mu2 * delta_crobot + mu3 * delta_cprev;
-
-            if (cost < min_cost) {
-                min_cost = cost;
-                best_sector = k;
-            }
+    double angle_to_target_global = std::atan2(dy, dx) * 180.0 / PI;
+    double fi_deg = fi * 180.0 / PI;
+    double target_angle_rel = angle_to_target_global - fi_deg;
+    while (target_angle_rel > 180.0) target_angle_rel -= 360.0;
+    while (target_angle_rel < -180.0) target_angle_rel += 360.0;
+    double target_angle_rel_360 = target_angle_rel;
+    if (target_angle_rel_360 < 0.0) target_angle_rel_360 += 360.0;
+    int target_sector = (int)std::round(target_angle_rel_360 / sigma) % n;
+    // 4. Nájdeme voľné úseky
+    struct Valley
+    {
+        int start;
+        int end;
+    };
+    std::vector<Valley> valleys;
+    int k = 0;
+    while (k < n)
+    {
+        if (Hb[k] == 0)
+        {
+            int start = k;
+            while (k < n && Hb[k] == 0) k++;
+            int end = k - 1;
+            valleys.push_back({start, end});
+        }
+        else
+        {
+            k++;
         }
     }
-
-    // Uloženie výsledku pre regulátor
+    // Ak je histogram cyklický a voľný interval je na konci aj na začiatku, spojíme ich
+    if (!valleys.empty() && Hb[0] == 0 && Hb[n-1] == 0 && valleys.size() >= 2)
+    {
+        Valley first = valleys.front();
+        Valley last = valleys.back();
+        valleys.erase(valleys.begin());
+        valleys.pop_back();
+        valleys.insert(valleys.begin(), {last.start, first.end + n});
+    }
+    // 5. Vytvoríme kandidátske smery
+    std::vector<int> candidates;
+    int wide_threshold = (int)(20.0 / sigma); // cca 20 stupňov
+    for (const auto& v : valleys)
+    {
+        int width = v.end - v.start + 1;
+        if (width <= wide_threshold)
+        {
+            // úzky priechod -> stred
+            int c = (v.start + v.end) / 2;
+            candidates.push_back((c % n + n) % n);
+        }
+        else
+        {
+            // široký priechod -> kraje
+            int left_candidate = v.start + wide_threshold / 2;
+            int right_candidate = v.end - wide_threshold / 2;
+            candidates.push_back((left_candidate % n + n) % n);
+            candidates.push_back((right_candidate % n + n) % n);
+        }
+        // ak cieľ leží vo voľnom intervale, pridáme aj cieľ
+        int ts = target_sector;
+        bool in_valley = false;
+        if (v.end < n)
+        {
+            if (ts >= v.start && ts <= v.end) in_valley = true;
+        }
+        else
+        {
+            int ts2 = ts;
+            if (ts2 < v.start) ts2 += n;
+            if (ts2 >= v.start && ts2 <= v.end) in_valley = true;
+        }
+        if (in_valley)
+            candidates.push_back(target_sector);
+    }
+    // Ak nie sú kandidáti, zober aspoň cieľ alebo predošlý smer
+    if (candidates.empty())
+    {
+        candidates.push_back(previous_k);
+    }
+    // 6. Cost funkcia
+    auto deltaSector = [this](int a, int b) -> int
+    {
+        int d = std::abs(a - b);
+        return std::min(d, n - d);
+    };
+    double best_cost = 1e9;
+    int best_sector = candidates[0];
+    for (int c : candidates)
+    {
+        double mu1 = 5.0; // cieľ
+        double mu2 = 2.0; // dopredu
+        double mu3 = 2.0; // predosly smer
+        double cost =
+            mu1 * deltaSector(c, target_sector) +
+            mu2 * deltaSector(c, 0) +
+            mu3 * deltaSector(c, previous_k);
+        if (cost < best_cost)
+        {
+            best_cost = cost;
+            best_sector = c;
+        }
+    }
     previous_k = best_sector;
     double chosen_angle_rel = best_sector * sigma;
-    if (chosen_angle_rel > 180.0) chosen_angle_rel -= 360.0; // Prevod znova na -180 až +180
-
-    // Vypočítame konečný globálny uhol, kam sa má robot otočiť
-    vfh_target_angle = fi + (chosen_angle_rel * PI / 180.0);
+    if (chosen_angle_rel > 180.0) chosen_angle_rel -= 360.0;
+    vfh_target_angle = fi + chosen_angle_rel * PI / 180.0;
+    while (vfh_target_angle > PI) vfh_target_angle -= 2.0 * PI;
+    while (vfh_target_angle < -PI) vfh_target_angle += 2.0 * PI;
 
     emit publishLidar(copyOfLaserData);
     // update();//tento prikaz prinuti prekreslit obrazovku.. zavola sa paintEvent funkcia
