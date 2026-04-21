@@ -59,6 +59,32 @@ private:
   /// toto su callbacky co sa sa volaju s novymi datami
   int processThisLidar(const std::vector<LaserData> &laserData);
   int processThisRobot(const TKobukiData &robotdata);
+
+  /// Vlastne
+  double x_ref = 3.0;
+  double y_ref = 3.0;
+
+  int num_sectors = 72;
+  double vfh_target_angle = 0.0;
+  double robot_radius = 0.175; /// todo
+  double rs = 0.10;
+  double total_radius = robot_radius + rs;
+
+  double c_i = 1;
+  double a_i = 1;
+  double b_i = 0.333;
+
+  double tau_low = 0.1;
+  double tau_high = 1.0;
+
+  double mi1 = 5.0, mi2 = 2.0, mi3 = 2.0;
+  int prev_selected_sector = 0;
+
+  std::vector<double> H_p; // Polarny histogram
+  std::vector<int> H_b;    // Binarny histogram
+
+  void calculateVFH(const std::vector<LaserData> &laserData);
+
 #ifndef DISABLE_OPENCV
   int processThisCamera(cv::Mat cameraData);
 #endif
