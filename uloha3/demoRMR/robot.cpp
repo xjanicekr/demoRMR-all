@@ -1,4 +1,5 @@
 #include "robot.h"
+#include <deque>
 #include <vector>
 #include <cmath>
 #include <iostream>
@@ -65,11 +66,20 @@ int prev_enc_R = 0;
 int prev_enc_L = 0;
 
 bool is_initialized = false;
+struct Pose
+{
+    double x;
+    double y;
+    double fi;
+    uint32_t t;
+};
+std::deque<Pose> poseHistory;
+uint32_t lastLaserTimestamp = 0;
 ///toto je calback na data z robota, ktory ste podhodili robotu vo funkcii initAndStartRobot
 /// vola sa vzdy ked dojdu nove data z robota. nemusite nic riesit, proste sa to stane
 int robot::processThisRobot(const TKobukiData &robotdata)
 {
-    std::cout << "ROBOT CALLBACK\n";
+    std::cout <<"ROBOT DATA TIMESTAMP " <<robotdata.timestamp << std::endl;
     long double tickToMeter = 0.000085292090497737556558;
     long double b = 0.23;
 
@@ -111,8 +121,17 @@ int robot::processThisRobot(const TKobukiData &robotdata)
         x_r = x;
         y_r = y;
         phi_r = fi;
-        std::cout << "ODOM: " << x << " " << y << " " << fi << std::endl;
+
+        if (poseHistory.empty() || poseHistory.back().t != lastLaserTimestamp)
+        {
+            poseHistory.push_back({x, y, fi, lastLaserTimestamp});
+        }
+
+        if (poseHistory.size() > 1000)
+            poseHistory.pop_front();
+
     }
+
 ///TU PISTE KOD... TOTO JE TO MIESTO KED NEVIETE KDE ZACAT,TAK JE TO NAOZAJ TU. AK AJ TAK NEVIETE, SPYTAJTE SA CVICIACEHO MA TU NATO STRING KTORY DA DO HLADANIA XXX
 
     ///kazdy piaty krat, aby to ui moc nepreblikavalo..
@@ -127,7 +146,7 @@ int robot::processThisRobot(const TKobukiData &robotdata)
         /// okno pocuva vo svojom slote a vasu premennu nastavi tak ako chcete. prikaz emit to presne takto spravi
         /// viac o signal slotoch tu: https://doc.qt.io/qt-5/signalsandslots.html
         ///posielame sem nezmysli.. pohrajte sa nech sem idu zmysluplne veci
-        emit publishPosition(robotdata.EncoderLeft,y,fi);
+        emit publishPosition(x, y, fi);
         ///toto neodporucam na nejake komplikovane struktury.signal slot robi kopiu dat. radsej vtedy posielajte
         /// prazdny signal a slot bude vykreslovat strukturu (vtedy ju musite mat samozrejme ako member premmennu v mainwindow.ak u niekoho najdem globalnu premennu,tak bude cistit bludisko zubnou kefkou.. kefku dodam)
         /// vtedy ale odporucam pouzit mutex, aby sa vam nestalo ze budete pocas vypisovania prepisovat niekde inde
@@ -187,6 +206,8 @@ struct Point {
     float x;
     float y;
 };
+
+
 Point toGlobal(
     float x_r, float y_r,
     float phi_r,
@@ -194,10 +215,10 @@ Point toGlobal(
 {
     Point p;
 
-    float angle = phi_r + scan.scanAngle;
+    float angle = phi_r - scan.scanAngle;
 
     angle = angle * M_PI / 180.0;
-    float dist = scan.scanDistance;
+    float dist = scan.scanDistance / 1000.0f;
 
     float maxDist = (GRID_SIZE * RESOLUTION) / 2.0f;
 
@@ -239,7 +260,6 @@ void markLine(int x0, int y0, int x1, int y1, Cell grid[][GRID_SIZE])
         if (e2 <  dx) { err += dx; y += sy; }
     }
 
-
     if (x1 >= 0 && x1 < GRID_SIZE && y1 >= 0 && y1 < GRID_SIZE)
     {
         grid[y1][x1].occupied = 1;
@@ -247,10 +267,55 @@ void markLine(int x0, int y0, int x1, int y1, Cell grid[][GRID_SIZE])
     if (x0 == x1 && y0 == y1)
         return;
 }
+Pose interpolate(uint32_t t)
+{
+    if (poseHistory.empty())
+    {
+        return {x, y, fi, t};
+    }
+
+    for (size_t i = 1; i < poseHistory.size(); i++)
+    {
+        auto &p1 = poseHistory[i - 1];
+        auto &p2 = poseHistory[i];
+
+        if (p1.t <= t && p2.t >= t)
+        {
+            uint32_t dt = p2.t - p1.t;
+
+            if (dt == 0)
+            {
+                return p1;
+            }
+
+            double a = double(t - p1.t) / double(dt);
+
+            Pose p;
+            p.x = p1.x + a * (p2.x - p1.x);
+            p.y = p1.y + a * (p2.y - p1.y);
+
+            double d = p2.fi - p1.fi;
+            if (d > M_PI) d -= 2 * M_PI;
+            if (d < -M_PI) d += 2 * M_PI;
+
+            p.fi = p1.fi + a * d;
+            p.t = t;
+
+            return p;
+        }
+    }
+
+    return poseHistory.back();
+}
 
 int robot::processThisLidar(const std::vector<LaserData>& laserData)
 {
     copyOfLaserData = laserData;
+
+    if (!laserData.empty())
+    {
+        lastLaserTimestamp = laserData[0].timestamp;
+    }
 
     static float prev_phi = 0.0f;
 
@@ -258,36 +323,45 @@ int robot::processThisLidar(const std::vector<LaserData>& laserData)
     if (angle_diff > M_PI)
         angle_diff = 2.0f * M_PI - angle_diff;
 
-    bool isRotating = (angle_diff > 0.005f);
+    bool isRotating = (angle_diff > 0.03f);
 
     prev_phi = phi_r;
 
-    int robotX = toCell(x_r);
-    int robotY = toCell(y_r);
+
 
     const float LIDAR_MAX = 3.0f;
 
     for (const auto& laser : copyOfLaserData)
     {
+        Pose p = interpolate(laser.timestamp);
+        // Pose p;
+        // p.x = x;
+        // p.y = y;
+        // p.fi = fi;
+        std::cout <<" LASER TIMESTAMP" << laser.timestamp <<  std::endl;
         float dist = laser.scanDistance / 1000.0f;
+        float angle = p.fi - laser.scanAngle * M_PI / 180.0f;
 
-        if (dist < 0.05f)
-            continue;
+        float gx = p.x + dist * cos(angle);
+        float gy = p.y + dist * sin(angle);
 
-        float angle = phi_r - laser.scanAngle * M_PI / 180.0f;
-        Point p;
-        p.x = x_r + dist * cos(angle);
-        p.y = y_r + dist * sin(angle);
+        int robotX = toCell(p.x);
+        int robotY = toCell(p.y);
 
-        int x_end = toCell(p.x);
-        int y_end = toCell(p.y);
+        int x_end = toCell(gx);
+        int y_end = toCell(gy);
 
-        markLine(robotX, robotY, x_end, y_end, grid);
-
-        if (!isRotating && dist < LIDAR_MAX - 0.005f)
+        if (!isRotating && dist > 0.15)
         {
-            int x_obs = toCell(p.x);
-            int y_obs = toCell(p.y);
+            markLine(robotX, robotY, x_end, y_end, grid);
+        }
+
+        if (!isRotating &&
+            dist > 0.15f &&
+            dist < LIDAR_MAX - 0.05f)
+        {
+            int x_obs = toCell(gx);
+            int y_obs = toCell(gy);
 
             if (x_obs >= 0 && x_obs < GRID_SIZE &&
                 y_obs >= 0 && y_obs < GRID_SIZE)
@@ -295,12 +369,30 @@ int robot::processThisLidar(const std::vector<LaserData>& laserData)
                 grid[y_obs][x_obs].occupied = 1;
             }
         }
+
     }
 
-    if (!isRotating)
+    static double prev_x = 0.0;
+    static double prev_y = 0.0;
+    static double prev_fi = 0.0;
+
+    double dx = fabs(x - prev_x);
+    double dy = fabs(y - prev_y);
+    double dfi = fabs(fi - prev_fi);
+
+    bool isMoving = (dx > 0.001 || dy > 0.001 || dfi > 0.001);
+
+    prev_x = x;
+    prev_y = y;
+    prev_fi = fi;
+
+    if (!isRotating && isMoving)
     {
         saveMap(grid);
     }
+
+
+
 
     emit publishLidar(copyOfLaserData);
 
