@@ -3,7 +3,7 @@
 #include "librobot/librobot.h"
 #include <QObject>
 #include <QWidget>
-
+#include <atomic>
 #ifndef DISABLE_OPENCV
 #include "opencv2/core/utility.hpp"
 #include "opencv2/highgui/highgui.hpp"
@@ -22,6 +22,8 @@ Q_DECLARE_METATYPE(std::vector<LaserData>)
 class robot : public QObject {
   Q_OBJECT
 public:
+  std::atomic<bool> isRotating{false};
+  float angular_velocity = 0.0f;
   explicit robot(QObject *parent = nullptr);
 
   void initAndStartRobot(std::string ipaddress);

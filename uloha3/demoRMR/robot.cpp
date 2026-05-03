@@ -73,13 +73,67 @@ struct Pose
     double fi;
     uint32_t t;
 };
+
+struct Waypoint {
+    double x;
+    double y;
+};
+std::vector<Waypoint> path;
+int current_target_idx = 0;
+bool path_active = false;
+void addWaypoint(double x, double y)
+{
+    path.push_back({x, y});
+    path_active = true;
+}
+
+void clearPath()
+{
+    path.clear();
+    current_target_idx = 0;
+    path_active = false;
+}
+bool getCurrentTarget(double &x_ref, double &y_ref)
+{
+    if (!path_active || current_target_idx >= path.size())
+        return false;
+
+    x_ref = path[current_target_idx].x;
+    y_ref = path[current_target_idx].y;
+    return true;
+}
+
+void setPath()
+{
+    clearPath();
+//sim
+    addWaypoint(0.0, 3.35);
+    addWaypoint(2.7, 4.2);
+    addWaypoint(4.2, 3.9);
+    addWaypoint(2.8, 4.1);
+    addWaypoint(3.1, 0.7);
+    addWaypoint(4.9, 0.7);
+    addWaypoint(4.9, 1.3);
+    addWaypoint(4.9, 0.7);
+    addWaypoint(3.1, 0.7);
+    addWaypoint(2.9, -1.01);
+    addWaypoint(1.5, -1.05);
+//real
+    // addWaypoint(0.0, 3.35);
+    // addWaypoint(1.5, 3.75);
+    // addWaypoint(3.24, 3.7);
+    // addWaypoint(4.14, 3.15);
+    // addWaypoint(3.24, 3.7);
+
+}
 std::deque<Pose> poseHistory;
 uint32_t lastLaserTimestamp = 0;
+// bool isRotating = false;
 ///toto je calback na data z robota, ktory ste podhodili robotu vo funkcii initAndStartRobot
 /// vola sa vzdy ked dojdu nove data z robota. nemusite nic riesit, proste sa to stane
 int robot::processThisRobot(const TKobukiData &robotdata)
 {
-    std::cout <<"ROBOT DATA TIMESTAMP " <<robotdata.timestamp << std::endl;
+    //std::cout <<"ROBOT DATA TIMESTAMP " <<robotdata.timestamp << std::endl;
     long double tickToMeter = 0.000085292090497737556558;
     long double b = 0.23;
 
@@ -87,6 +141,7 @@ int robot::processThisRobot(const TKobukiData &robotdata)
     if (!is_initialized){
         prev_enc_R = robotdata.EncoderRight;
         prev_enc_L = robotdata.EncoderLeft;
+        setPath();
         is_initialized = true;
     }
     else{
@@ -122,14 +177,148 @@ int robot::processThisRobot(const TKobukiData &robotdata)
         y_r = y;
         phi_r = fi;
 
-        if (poseHistory.empty() || poseHistory.back().t != lastLaserTimestamp)
-        {
-            poseHistory.push_back({x, y, fi, lastLaserTimestamp});
-        }
+        // std::cout << "POSE: x=" << x
+        //           << " y=" << y
+        //           << " fi=" << fi
+        //           << std::endl;
+        std::cout << "robot timestamp:" << robotdata.synctimestamp << std::endl;
+        poseHistory.push_back({x, y, fi, robotdata.synctimestamp});
+
 
         if (poseHistory.size() > 1000)
             poseHistory.pop_front();
 
+        double x_ref, y_ref;
+
+        if (!getCurrentTarget(x_ref, y_ref))
+        {
+            forwardspeed = 0;
+            rotationspeed = 0;
+            return 0;
+        }
+
+
+        double Kp_rot = 0.8;
+        double Kp_trans = 200.0;
+
+        double pa1 = 0.1;
+        double pa2 = 0.4;
+        double dist_tol = 0.5;
+
+        static bool is_rotating = true;
+
+        static double last_rot_speed = 0.0;
+        static double last_trans_speed = 0.0;
+
+        double max_accel_rot = 0.01;
+        double max_accel_trans = 5.0;
+
+
+        double dx = x_ref - x;
+        double dy = y_ref - y;
+        double distance = std::sqrt(dx*dx + dy*dy);
+
+
+        double fi_ref = atan2(dy, dx);
+
+        double error_fi = fi_ref - fi;
+        while(error_fi > M_PI) error_fi -= 2.0 * M_PI;
+        while(error_fi < -M_PI) error_fi += 2.0 * M_PI;
+
+        double out_rot = 0.0;
+        double out_trans = 0.0;
+
+
+        if (distance > dist_tol)
+        {
+            if (is_rotating)
+            {
+                double target_rot = Kp_rot * error_fi;
+
+                if (target_rot > last_rot_speed + max_accel_rot)
+                    out_rot = last_rot_speed + max_accel_rot;
+                else if (target_rot < last_rot_speed - max_accel_rot)
+                    out_rot = last_rot_speed - max_accel_rot;
+                else
+                    out_rot = target_rot;
+
+                out_trans = 0.0;
+                last_trans_speed = 0.0;
+
+                if (fabs(error_fi) < pa1)
+                    is_rotating = false;
+            }
+            else
+            {
+                double target_trans = Kp_trans * distance;
+
+                if (target_trans > 400.0)
+                    target_trans = 400.0;
+
+                if (target_trans > last_trans_speed + max_accel_trans)
+                    out_trans = last_trans_speed + max_accel_trans;
+                else
+                    out_trans = target_trans;
+
+                if (out_trans < 25) out_trans = 25;
+
+                out_rot = 0.0;
+                last_rot_speed = 0.0;
+
+                if (fabs(error_fi) > pa2)
+                    is_rotating = true;
+            }
+        }
+        else
+        {
+
+            current_target_idx++;
+
+            if (current_target_idx >= path.size())
+            {
+                path_active = false;
+                printf("PATH FINISHED\n");
+            }
+
+            out_rot = 0.0;
+            out_trans = 0.0;
+        }
+
+
+        last_trans_speed = out_trans;
+        last_rot_speed = out_rot;
+
+        forwardspeed = out_trans;
+        rotationspeed = out_rot;
+        useDirectCommands = 0;
+
+
+        static uint32_t prev_time = 0;
+        static float prev_phi = 0.0f;
+
+        if (prev_time == 0)
+        {
+            prev_time = robotdata.synctimestamp;
+            prev_phi = phi_r;
+            return 0;
+        }
+
+        float dt = (robotdata.synctimestamp - prev_time) / 1000.0f;
+
+        if (dt < 0.001f) return 0;
+
+        float dphi = phi_r - prev_phi;
+
+        if (dphi > M_PI) dphi -= 2.0f * M_PI;
+        if (dphi < -M_PI) dphi += 2.0f * M_PI;
+
+        float angular_velocity = fabs(dphi / dt);
+        this->angular_velocity = angular_velocity;
+       // bool isRotating = (angular_velocity > 0.2f);
+        this->isRotating = (angular_velocity > 0.1f);
+
+        prev_phi = phi_r;
+        prev_time = robotdata.synctimestamp;
     }
 
 ///TU PISTE KOD... TOTO JE TO MIESTO KED NEVIETE KDE ZACAT,TAK JE TO NAOZAJ TU. AK AJ TAK NEVIETE, SPYTAJTE SA CVICIACEHO MA TU NATO STRING KTORY DA DO HLADANIA XXX
@@ -312,20 +501,17 @@ int robot::processThisLidar(const std::vector<LaserData>& laserData)
 {
     copyOfLaserData = laserData;
 
-    if (!laserData.empty())
-    {
-        lastLaserTimestamp = laserData[0].timestamp;
-    }
 
-    static float prev_phi = 0.0f;
 
-    float angle_diff = fabs(phi_r - prev_phi);
-    if (angle_diff > M_PI)
-        angle_diff = 2.0f * M_PI - angle_diff;
+    // static float prev_phi = 0.0f;
 
-    bool isRotating = (angle_diff > 0.03f);
+    // float angle_diff = fabs(phi_r - prev_phi);
+    // if (angle_diff > M_PI)
+    //     angle_diff = 2.0f * M_PI - angle_diff;
 
-    prev_phi = phi_r;
+    // bool isRotating = (angle_diff > 0.03f);
+
+    // prev_phi = phi_r;
 
 
 
@@ -333,12 +519,14 @@ int robot::processThisLidar(const std::vector<LaserData>& laserData)
 
     for (const auto& laser : copyOfLaserData)
     {
+        if (this->angular_velocity > 0.05f)
+            continue;
+
         Pose p = interpolate(laser.timestamp);
-        // Pose p;
-        // p.x = x;
-        // p.y = y;
-        // p.fi = fi;
-        std::cout <<" LASER TIMESTAMP" << laser.timestamp <<  std::endl;
+        std::cout << "Laser t: " << laser.timestamp
+                  << " | Used pose t: " << p.t
+                  << std::endl;
+
         float dist = laser.scanDistance / 1000.0f;
         float angle = p.fi - laser.scanAngle * M_PI / 180.0f;
 
@@ -351,26 +539,26 @@ int robot::processThisLidar(const std::vector<LaserData>& laserData)
         int x_end = toCell(gx);
         int y_end = toCell(gy);
 
-        if (!isRotating && dist > 0.15)
-        {
-            markLine(robotX, robotY, x_end, y_end, grid);
-        }
 
-        if (!isRotating &&
-            dist > 0.15f &&
-            dist < LIDAR_MAX - 0.05f)
-        {
-            int x_obs = toCell(gx);
-            int y_obs = toCell(gy);
 
-            if (x_obs >= 0 && x_obs < GRID_SIZE &&
-                y_obs >= 0 && y_obs < GRID_SIZE)
+
+        if (this->angular_velocity < 0.05f)
+        {
+
+
+            if (dist > 0.15f && dist < LIDAR_MAX - 0.05f)
             {
-                grid[y_obs][x_obs].occupied = 1;
+                markLine(robotX, robotY, x_end, y_end, grid);
+                if (x_end >= 0 && x_end < GRID_SIZE &&
+                    y_end >= 0 && y_end < GRID_SIZE)
+                {
+                    grid[y_end][x_end].occupied = 1;
+                }
             }
         }
 
     }
+
 
     static double prev_x = 0.0;
     static double prev_y = 0.0;
@@ -385,8 +573,7 @@ int robot::processThisLidar(const std::vector<LaserData>& laserData)
     prev_x = x;
     prev_y = y;
     prev_fi = fi;
-
-    if (!isRotating && isMoving)
+    if (!isRotating && !isMoving)
     {
         saveMap(grid);
     }

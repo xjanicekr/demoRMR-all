@@ -17,7 +17,8 @@ MainWindow::MainWindow(QWidget *parent) :
 {
 
     //tu je napevno nastavena ip. treba zmenit na to co ste si zadali do text boxu alebo nejaku inu pevnu. co bude spravna
-    ipaddress="127.0.0.1";//192.168.1.11toto je na niektory realny robot.. na lokal budete davat "127.0.0.1"
+    ipaddress="127.0.0.1";//192.168.1.15 toto je na niektory realny robot..
+                        // na lokal budete davat "127.0.0.1"
 
     ui->setupUi(this);
     datacounter=0;
@@ -150,13 +151,13 @@ void MainWindow::on_pushButton_9_clicked() //start button
 void MainWindow::on_pushButton_2_clicked() //forward
 {
     //pohyb dopredu
-    _robot.setSpeed(500,0);
+    _robot.setSpeed(250,0);//500
 
 }
 
 void MainWindow::on_pushButton_3_clicked() //back
 {
-    _robot.setSpeed(-250,0);
+    _robot.setSpeed(-200,0); //-250
 
 }
 
