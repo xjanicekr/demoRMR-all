@@ -1,0 +1,7 @@
+C:/RMR_semestralne/demoRMR-all/uloha3/build/Desktop_Qt_6_9_2_MSVC2022_64bit-Release/CMakeFiles/edit_cache.dir
+C:/RMR_semestralne/demoRMR-all/uloha3/build/Desktop_Qt_6_9_2_MSVC2022_64bit-Release/CMakeFiles/rebuild_cache.dir
+C:/RMR_semestralne/demoRMR-all/uloha3/build/Desktop_Qt_6_9_2_MSVC2022_64bit-Release/demoRMR/CMakeFiles/demoRMR.dir
+C:/RMR_semestralne/demoRMR-all/uloha3/build/Desktop_Qt_6_9_2_MSVC2022_64bit-Release/demoRMR/CMakeFiles/edit_cache.dir
+C:/RMR_semestralne/demoRMR-all/uloha3/build/Desktop_Qt_6_9_2_MSVC2022_64bit-Release/demoRMR/CMakeFiles/rebuild_cache.dir
+C:/RMR_semestralne/demoRMR-all/uloha3/build/Desktop_Qt_6_9_2_MSVC2022_64bit-Release/demoRMR/CMakeFiles/demoRMR_autogen_timestamp_deps.dir
+C:/RMR_semestralne/demoRMR-all/uloha3/build/Desktop_Qt_6_9_2_MSVC2022_64bit-Release/demoRMR/CMakeFiles/demoRMR_autogen.dir

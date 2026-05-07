@@ -1,0 +1,94 @@
+{
+	"configurations" : 
+	[
+		{
+			"directories" : 
+			[
+				{
+					"build" : ".",
+					"childIndexes" : 
+					[
+						1
+					],
+					"jsonFile" : "directory-.-Debug-d0094a50bb2071803777.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.16"
+					},
+					"projectIndex" : 0,
+					"source" : "."
+				},
+				{
+					"build" : "demoRMR",
+					"jsonFile" : "directory-demoRMR-Debug-206f210decbcbe45cdde.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.16"
+					},
+					"parentIndex" : 0,
+					"projectIndex" : 0,
+					"source" : "demoRMR",
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2
+					]
+				}
+			],
+			"name" : "Debug",
+			"projects" : 
+			[
+				{
+					"directoryIndexes" : 
+					[
+						0,
+						1
+					],
+					"name" : "demoRMR",
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2
+					]
+				}
+			],
+			"targets" : 
+			[
+				{
+					"directoryIndex" : 1,
+					"id" : "demoRMR::@7822eca12027d63004ba",
+					"jsonFile" : "target-demoRMR-Debug-eb80924c2f416853bdc3.json",
+					"name" : "demoRMR",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 1,
+					"id" : "demoRMR_autogen::@7822eca12027d63004ba",
+					"jsonFile" : "target-demoRMR_autogen-Debug-efa7f9dfbca54030b9b8.json",
+					"name" : "demoRMR_autogen",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 1,
+					"id" : "demoRMR_autogen_timestamp_deps::@7822eca12027d63004ba",
+					"jsonFile" : "target-demoRMR_autogen_timestamp_deps-Debug-a0bf9da7f2743385e70b.json",
+					"name" : "demoRMR_autogen_timestamp_deps",
+					"projectIndex" : 0
+				}
+			]
+		}
+	],
+	"kind" : "codemodel",
+	"paths" : 
+	{
+		"build" : "C:/RMR_semestralne/demoRMR-all/demoRMR-all/build/Desktop_Qt_6_9_2_MSVC2022_64bit-Debug",
+		"source" : "C:/RMR_semestralne/demoRMR-all/demoRMR-all"
+	},
+	"version" : 
+	{
+		"major" : 2,
+		"minor" : 7
+	}
+}

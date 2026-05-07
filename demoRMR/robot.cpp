@@ -1,15 +1,40 @@
 #include "robot.h"
 #include <thread>
 #include <chrono>
+#include <cmath>
+#include <algorithm>
+#include <limits>
+
+double normalizeAngle(double angle){
+    return atan2(sin(angle), cos(angle));
+}
+
+double saturate(double value, double limit){
+    if (value > limit) return limit;
+    if (value < -limit) return -limit;
+    return value;
+}
+
+double normalizeAngleDeg(double angle) {
+    while (angle >= 360.0) angle -= 360.0;
+    while (angle < 0.0) angle += 360.0;
+    return angle;
+}
+
+double smallestAngleDiffDeg(double a, double b){
+    double d = fabs(normalizeAngleDeg(a - b));
+    if (d > 180.0) d = 360.0 - d;
+    return d;
+}
 
 robot::robot(QObject *parent) : QObject(parent)
 {
     qRegisterMetaType<LaserMeasurement>("LaserMeasurement");
-    #ifndef DISABLE_OPENCV
+#ifndef DISABLE_OPENCV
     qRegisterMetaType<cv::Mat>("cv::Mat");
 #endif
 #ifndef DISABLE_SKELETON
-qRegisterMetaType<skeleton>("skeleton");
+    qRegisterMetaType<skeleton>("skeleton");
 #endif
 }
 
@@ -18,20 +43,31 @@ void robot::initAndStartRobot(std::string ipaddress)
 
     forwardspeed=0;
     rotationspeed=0;
+    useDirectCommands = 0;
+    datacounter = 0;
     ///setovanie veci na komunikaciu s robotom/lidarom/kamerou.. su tam adresa porty a callback.. laser ma ze sa da dat callback aj ako lambda.
     /// lambdy su super, setria miesto a ak su rozumnej dlzky,tak aj prehladnost... ak ste o nich nic nepoculi poradte sa s vasim doktorom alebo lekarnikom...
     robotCom.setLaserParameters([this](const std::vector<LaserData>& dat)->int{return processThisLidar(dat);},ipaddress);
     robotCom.setRobotParameters([this](const TKobukiData& dat)->int{return processThisRobot(dat);},ipaddress);
-  #ifndef DISABLE_OPENCV
+#ifndef DISABLE_OPENCV
     robotCom.setCameraParameters(std::bind(&robot::processThisCamera,this,std::placeholders::_1),"http://"+ipaddress+":8000/stream.mjpg");
 #endif
-   #ifndef DISABLE_SKELETON
-      robotCom.setSkeletonParameters(std::bind(&robot::processThisSkeleton,this,std::placeholders::_1));
+#ifndef DISABLE_SKELETON
+    robotCom.setSkeletonParameters(std::bind(&robot::processThisSkeleton,this,std::placeholders::_1));
 #endif
     ///ked je vsetko nasetovane tak to tento prikaz spusti (ak nieco nieje setnute,tak to normalne nenastavi.cize ak napr nechcete kameru,vklude vsetky info o nej vymazte)
     robotCom.robotStart();
 
+    //setGoal(x_ref, y_ref);
 
+    std::vector<Waypoint> cesta;
+
+    cesta.push_back({0.6, 3.0});
+    cesta.push_back({3.0, 3.0});
+    //cesta.push_back({0.0, 2.0});
+    //cesta.push_back({0.0, 3.5});
+
+    setPath(cesta);
 }
 
 void robot::setSpeedVal(double forw, double rots)
@@ -54,6 +90,47 @@ void robot::setSpeed(double forw, double rots)
     useDirectCommands=1;
 }
 
+void robot::setGoal(double x_goal, double y_goal){
+    std::vector<Waypoint> singleGoal;
+    singleGoal.push_back({x_goal, y_goal});
+    setPath(singleGoal);
+}
+
+void robot::setPath(const std::vector<Waypoint>& newPath) {
+    path = newPath;
+    currentWaypointIndex = 0;
+
+    if (path.empty()) {
+        regulatorEnabled = false;
+        forwardspeed = 0;
+        rotationspeed = 0;
+        trans_ramp_speed = 0.0;
+        return;
+    }
+
+    x_ref = path[0].x;
+    y_ref = path[0].y;
+
+    regulatorState = ROTATE_TO_TARGET;
+    regulatorEnabled = true;
+
+    forwardspeed = 0;
+    rotationspeed = 0;
+    trans_ramp_speed = 0.0;
+
+    vfh_valid = false;
+    vfh_path_found = false;
+
+    H_b.assign(num_sectors, 0);
+
+    prev_selected_sector = 0;
+
+    useDirectCommands = 0;
+
+    printf("Nova cesta nastavena. Pocet bodov: %zu\n", path.size());
+    printf("Aktualny waypoint %d: x=%f y=%f\n", currentWaypointIndex, x_ref, y_ref);
+}
+
 ///toto je calback na data z robota, ktory ste podhodili robotu vo funkcii initAndStartRobot
 /// vola sa vzdy ked dojdu nove data z robota. nemusite nic riesit, proste sa to stane
 
@@ -67,6 +144,10 @@ int robot::processThisRobot(const TKobukiData &robotdata)
         prev_enc_R = robotdata.EncoderRight;
         prev_enc_L = robotdata.EncoderLeft;
 
+        x = 0.0;
+        y = 0.0;
+        fi = 0.0;
+
         is_inicialized = true;
     }
     else{
@@ -77,105 +158,140 @@ int robot::processThisRobot(const TKobukiData &robotdata)
         double diff_L = ticks_L * tickToMeter;
 
         double delta_alpha = (diff_R - diff_L) / b;
-        double fi_new = fi + delta_alpha;
+        double l = (diff_R + diff_L) / 2.0;
 
-        if (std::abs(diff_R - diff_L) < 0.000001){
-            double d_center = (diff_L + diff_R) / 2.0;
-            x += d_center * cos(fi);
-            y += d_center * sin(fi);
-        }
-        else{
-            double zlomok = (b * (diff_R + diff_L)) / (2.0 * (diff_R - diff_L));
-            x = x + zlomok * (sin(fi_new) - sin(fi));
-            y = y - zlomok * (cos(fi_new) - cos(fi));
-        }
+        double fi_mid = fi + delta_alpha / 2.0;
 
-        fi = fi_new;
+        x += l * cos(fi_mid);
+        y += l * sin(fi_mid);
 
-        while(fi > PI) fi -= 2.0 * PI;
-        while(fi < -PI) fi += 2.0 * PI;
+        fi += delta_alpha;
+        fi = atan2(sin(fi), cos(fi));
 
         prev_enc_R = robotdata.EncoderRight;
         prev_enc_L = robotdata.EncoderLeft;
-        printf("x:%f\n", x);
-        printf("y:%f\n", y);
-        printf("phi: %f\n", fi);
-
-        double Kp_rot = 0.8;
-        double Kp_trans = 200.0;
-
-        double pa1 = 0.1;
-        double pa2 = 0.4;
-        double dist_tol = 0.05;
-
-        static bool is_rotating = true;
-
-        static double last_rot_speed = 0.0;
-        static double last_trans_speed = 0.0;
-
-        double max_accel_rot = 0.01;
-        double max_accel_trans = 5.0;
-
-        double dx = x_ref - x;
-        double dy = y_ref - y;
-        double distance = std::sqrt(dx*dx + dy*dy);
-        double fi_ref = vfh_target_angle * (PI / 180.0);
-
-        double error_fi = fi_ref - fi;
-        while(error_fi > PI) error_fi -= 2.0 * PI;
-        while(error_fi < -PI) error_fi += 2.0 * PI;
-
-        double out_rot = 0.0;
-        double out_trans = 0.0;
-
-        if (distance > dist_tol){
-            if (is_rotating){
-                double target_rot = Kp_rot * error_fi;
-                if (target_rot > last_rot_speed + max_accel_rot){
-                    out_rot = last_rot_speed + max_accel_rot;
-                }else if (target_rot < last_rot_speed - max_accel_rot){
-                    out_rot = last_rot_speed - max_accel_rot;
-                }else{
-                    out_rot = target_rot;
-                }
-                out_trans = 0.0;
-                last_trans_speed = 0.0;
-                if (std::abs(error_fi) < pa1){
-                    is_rotating = false;
-                }
-            }else{
-                double target_trans;
-                target_trans = Kp_trans * distance;
-                if (target_trans > 400.0){
-                    target_trans = 400.0;
-                }
-                if (target_trans > last_trans_speed + max_accel_trans){
-                    out_trans = last_trans_speed + max_accel_trans;
-                }else {
-                    out_trans = target_trans;
-                }
-                out_trans=out_trans<25?25:out_trans;
-                out_rot = 0.0;
-                last_rot_speed = 0.0;
-                if (std::abs(error_fi) > pa2){
-                    is_rotating = true;
-                }
-            }
-        }else{
-            out_rot = 0.0;
-            out_trans = 0.0;
-        }
-
-        last_trans_speed = out_trans;
-        last_rot_speed = out_rot;
-
-        forwardspeed = out_trans;
-        rotationspeed = out_rot;
-        useDirectCommands = 0;
     }
 
 
-///TU PISTE KOD... TOTO JE TO MIESTO KED NEVIETE KDE ZACAT,TAK JE TO NAOZAJ TU. AK AJ TAK NEVIETE, SPYTAJTE SA CVICIACEHO MA TU NATO STRING KTORY DA DO HLADANIA XXX
+    ///TU PISTE KOD... TOTO JE TO MIESTO KED NEVIETE KDE ZACAT,TAK JE TO NAOZAJ TU. AK AJ TAK NEVIETE, SPYTAJTE SA CVICIACEHO MA TU NATO STRING KTORY DA DO HLADANIA XXX
+
+    if (regulatorEnabled) {
+        double dx = x_ref - x;
+        double dy = y_ref - y;
+
+        double distance_error = sqrt(dx * dx + dy * dy);
+
+        double active_deadband = distance_deadband;
+
+        if (!path.empty() && currentWaypointIndex < (int)path.size() - 1) {
+            active_deadband = distance_deadband;
+        }
+
+        if (distance_error < active_deadband) {
+            forwardspeed = 0;
+            rotationspeed = 0;
+            trans_ramp_speed = 0.0;
+
+            if (!path.empty() && currentWaypointIndex < (int)path.size() - 1) {
+                currentWaypointIndex++;
+
+                x_ref = path[currentWaypointIndex].x;
+                y_ref = path[currentWaypointIndex].y;
+
+                regulatorState = ROTATE_TO_TARGET;
+
+                vfh_valid = false;
+                vfh_path_found = false;
+
+                prev_selected_sector = 0;
+
+                printf("Waypoint dosiahnuty. Prechadzam na waypoint %d: x=%f y=%f\n",
+                       currentWaypointIndex,
+                       x_ref,
+                       y_ref);
+            }
+            else {
+                regulatorState = TARGET_REACHED;
+                regulatorEnabled = false;
+
+                printf("Finalny ciel dosiahnuty: x=%f y=%f fi=%f\n", x, y, fi);
+            }
+        }
+        else if (useVFHNavigation && !vfh_valid) {
+            forwardspeed = 0;
+            rotationspeed = 0;
+            trans_ramp_speed = 0.0;
+        }
+        else if (useVFHNavigation && !vfh_path_found) {
+            forwardspeed = 0;
+            rotationspeed = 0;
+            trans_ramp_speed = 0.0;
+        }
+        else {
+            double desired_angle = atan2(dy, dx); //Global uhol k cielu
+
+            if (useVFHNavigation) {
+                desired_angle = vfh_target_angle;
+            }
+
+            double angle_error = normalizeAngle(desired_angle - fi);
+
+            switch (regulatorState) {
+            case ROTATE_TO_TARGET: {
+                forwardspeed = 0;
+                trans_ramp_speed = 0.0;
+
+                rotationspeed = Kp_rot * angle_error;
+                rotationspeed = saturate(rotationspeed, max_rot_speed);
+
+                if (fabs(angle_error) < angle_deadband_1)
+                {
+                    rotationspeed = 0;
+                    regulatorState = MOVE_TO_TARGET;
+                }
+
+                break;
+            }
+
+            case MOVE_TO_TARGET: {
+                rotationspeed = 0;
+                if (fabs(angle_error) > angle_deadband_2) {
+                    forwardspeed = 0;
+                    trans_ramp_speed = 0.0;
+                    regulatorState = ROTATE_TO_TARGET;
+                }
+                else {
+                    double desired_forward_speed = Kp_trans * distance_error;
+
+                    if (desired_forward_speed > max_trans_speed)
+                        desired_forward_speed = max_trans_speed;
+
+                    if (trans_ramp_speed < desired_forward_speed) {
+                        trans_ramp_speed += trans_ramp_step;
+
+                        if (trans_ramp_speed > desired_forward_speed)
+                            trans_ramp_speed = desired_forward_speed;
+                    }
+                    else {
+                        trans_ramp_speed = desired_forward_speed;
+                    }
+
+                    forwardspeed = trans_ramp_speed;
+                }
+
+                break;
+            }
+
+            case TARGET_REACHED:
+            default: {
+                forwardspeed = 0;
+                rotationspeed = 0;
+                trans_ramp_speed = 0.0;
+                break;
+            }
+            }
+        }
+    }
 
     ///kazdy piaty krat, aby to ui moc nepreblikavalo..
     if(datacounter%5==0)
@@ -217,147 +333,248 @@ int robot::processThisRobot(const TKobukiData &robotdata)
 
 }
 
-void robot::calculateVFH(const std::vector<LaserData> &laserData){
+void robot::calculateVFH(const std::vector<LaserData> &laserData)
+{
     struct Valley {
         int start_sector;
         int end_sector;
         int size;
     };
-    std::vector<Valley> valleys;
 
-    int delta = 360 / num_sectors;
+    if ((int)H_b.size() != num_sectors) {
+        H_b.assign(num_sectors, 0);
+    }
+
+    std::vector<Valley> valleys;
+    std::vector<int> candidates;
+
+    double sector_width = 360.0 / num_sectors;
 
     H_p.assign(num_sectors, 0.0);
-    H_b.assign(num_sectors, 0);
 
-    double fi_deg = fi * (180 / PI);
-    if (fi_deg < 0) fi_deg += 360.0;
+    //Aktualne natocenie v globale
+    double fi_deg = normalizeAngleDeg(fi * 180.0 / PI);
 
-    double global_targe_angle = std::atan2(y_ref - y, x_ref - x) * (180.0 / PI);
-    if (global_targe_angle < 0) global_targe_angle += 360.0;
-    int target_sector = (int)(global_targe_angle / delta) % num_sectors;
+    //Natocenie na ciel v globale
+    double global_target_angle = atan2(y_ref - y, x_ref - x) * 180.0 / PI;
+    global_target_angle = normalizeAngleDeg(global_target_angle);
 
-    for (const auto& scan : laserData){
+    // lokalny smer na ciel vzhladom na robota
+    double local_target_angle = normalizeAngleDeg(global_target_angle - fi_deg);
+
+    int target_sector = (int)(local_target_angle / sector_width) % num_sectors;
+
+    // v lokalnom histograme je aktualny smer robota sektor 0
+    int current_fi_sector = 0;
+
+    // Hp
+    for (const auto& scan : laserData) {
         double d_i = scan.scanDistance / 1000.0;
 
-        if (d_i > 3.0) continue;
+        if (d_i <= 0.001) continue;
+        if (d_i > laser_max_range) continue;
 
-        double alpha_i_local = 360.0 - scan.scanAngle;
-
-        double alpha_i_global = alpha_i_local + fi_deg;
-        while (alpha_i_global >= 360.0) alpha_i_global -= 360.0;
-        while (alpha_i_global < 0.0) alpha_i_global += 360.0;
+        double alpha_i_local = normalizeAngleDeg(360.0 - scan.scanAngle);
 
         double gamma_i;
+
         if (d_i <= total_radius) {
             gamma_i = 90.0;
-        } else {
-            gamma_i = std::asin(total_radius / d_i) * (180.0 / PI);
+        }
+        else {
+            double ratio = total_radius / d_i;
+            if (ratio > 1.0) ratio = 1.0;
+
+            gamma_i = asin(ratio) * 180.0 / PI;
         }
 
-        double m_i = pow(c_i, 2) * (a_i - b_i * d_i);
+        double m_i = c_i * c_i * (a_i - b_i * d_i);
 
-        double a_min = alpha_i_global - gamma_i;
-        double a_max = alpha_i_global + gamma_i;
+        if (m_i < 0.0)
+            m_i = 0.0;
 
         for (int k = 0; k < num_sectors; ++k) {
-            double s_min = k * delta;
-            double s_max = (k + 1) * delta;
+            double sector_center = normalizeAngleDeg((k + 0.5) * sector_width);
+            double diff = smallestAngleDiffDeg(sector_center, alpha_i_local);
 
-            if (std::max(s_min, a_min) <= std::min(s_max, a_max) ||
-                std::max(s_min, a_min + 360.0) <= std::min(s_max, a_max + 360.0) ||
-                std::max(s_min, a_min - 360.0) <= std::min(s_max, a_max - 360.0)) {
+            if (diff <= gamma_i + sector_width / 2.0) {
                 H_p[k] += m_i;
             }
         }
     }
 
-    for (int k = 0; k < num_sectors; ++k){
-        if (H_p[k] > tau_high) H_b[k] = 1;
-        else if (H_p[k] < tau_low) H_b[k] = 0;
+    // 2. Hb 1-obsadeny, 0-volny
+    std::vector<int> H_b_new(num_sectors, 0);
+
+    for (int k = 0; k < num_sectors; ++k) {
+        if (H_p[k] > tau_high) {
+            H_b_new[k] = 1;
+        }
+        else if (H_p[k] < tau_low) {
+            H_b_new[k] = 0;
+        }
+        else {
+            H_b_new[k] = H_b[k];
+        }
     }
 
-    auto calc_diff = [](int s1, int s2, int n){
-        int d = std::abs(s1 - s2);
-        return d > n/2 ? n-d : d;
+    H_b = H_b_new;
+
+    double hp_max = 0.0;
+    int blocked_count = 0;
+
+    for (int k = 0; k < num_sectors; ++k){
+        if (H_p[k] > hp_max)
+            hp_max = H_p[k];
+
+        if (H_b[k] == 1)
+            blocked_count++;
+    }
+
+    printf("VFH debug: Hp_max=%f, blocked=%d/%d, tau_low=%f, tau_high=%f, target_sector=%d, target=%s, Hp_target=%f, local_target=%f, global_target=%f, fi_deg=%f\n",
+           hp_max,
+           blocked_count,
+           num_sectors,
+           tau_low,
+           tau_high,
+           target_sector,
+           H_b[target_sector] ? "BLOCKED" : "FREE",
+           H_p[target_sector],
+           local_target_angle,
+           global_target_angle,
+           fi_deg);
+
+
+    auto sectorDiff = [this](int s1, int s2) {
+        int d = abs(s1 - s2);
+        if (d > num_sectors / 2)
+            d = num_sectors - d;
+        return d;
     };
 
-    int current_fi_sector = (int)(fi_deg / delta) % num_sectors;
+    auto addCandidate = [&candidates, this](int c) {
+        c = (c % num_sectors + num_sectors) % num_sectors;
 
-    int start_idx = -1;
-    for(int i = 0; i < num_sectors; i++) {
-        if(H_b[i] == 1) {
-            start_idx = i;
-            break;
-        }
+        if (std::find(candidates.begin(), candidates.end(), c) == candidates.end())
+            candidates.push_back(c);
+    };
+
+    bool any_free = false;
+    bool any_blocked = false;
+
+    for (int k = 0; k < num_sectors; ++k) {
+        if (H_b[k] == 0) any_free = true;
+        else any_blocked = true;
     }
 
-    if (start_idx != -1) {
-        int current_size = 0;
+    if (!any_free) {
+        vfh_valid = true;
+        vfh_path_found = false;
+
+        printf("VFH+: ziadny volny sektor, robot stoji.\n");
+        return;
+    }
+
+    if (!any_blocked) {
+        valleys.push_back({0, num_sectors - 1, num_sectors});
+    }
+    else {
+        int start_blocked = -1;
+        for (int k = 0; k < num_sectors; ++k) {
+            if (H_b[k] == 1) {
+                start_blocked = k;
+                break;
+            }
+        }
+
+        bool in_valley = false;
         int v_start = -1;
+        int v_size = 0;
 
-        for(int i = 0; i < num_sectors; i++) {
-            int idx = (start_idx + i) % num_sectors;
-
+        for (int step = 1; step <= num_sectors; ++step) {
+            int idx = (start_blocked + step) % num_sectors;
             if (H_b[idx] == 0) {
-                if (current_size == 0) v_start = idx;
-                current_size++;
-            } else {
-                if (current_size > 0) {
-                    int v_end = (start_idx + i - 1 + num_sectors) % num_sectors;
-                    valleys.push_back({v_start, v_end, current_size});
-                    current_size = 0;
+                if (!in_valley) {
+                    in_valley = true;
+                    v_start = idx;
+                    v_size = 1;
+                }
+                else {
+                    v_size++;
                 }
             }
-        }
-        if (current_size > 0) {
-            int v_end = (start_idx + num_sectors - 1) % num_sectors;
-            valleys.push_back({v_start, v_end, current_size});
+            else {
+                if (in_valley) {
+                    int v_end = (idx - 1 + num_sectors) % num_sectors;
+                    valleys.push_back({v_start, v_end, v_size});
+
+                    in_valley = false;
+                    v_start = -1;
+                    v_size = 0;
+                }
+            }
         }
     }
 
-    std::vector<int> candidates;
-
-    int s_wide = 8;
-    int offset = 0;
-
-    if (start_idx == -1) {
-        candidates.push_back(target_sector);
-    } else {
-        for (const auto& v : valleys) {
-            if (v.size < s_wide) {
-                int center = (v.start_sector + v.size / 2) % num_sectors;
-                candidates.push_back(center);
-            } else {
-                int right_edge = (v.start_sector + offset) % num_sectors;
-                int left_edge = (v.start_sector + v.size - 1 - offset + num_sectors) % num_sectors;
-                candidates.push_back(right_edge);
-                candidates.push_back(left_edge);
-
-                bool target_in_valley = false;
-                if (v.start_sector <= v.end_sector) {
-                    target_in_valley = (target_sector >= v.start_sector && target_sector <= v.end_sector);
-                } else {
-                    target_in_valley = (target_sector >= v.start_sector || target_sector <= v.end_sector);
-                }
-
-                if (target_in_valley) {
-                    candidates.push_back(target_sector);
-                }
-            }
+    // 5. VYBER KANDIDATSKYCH SEKTOROV
+    for (const auto& v : valleys) {
+        if (v.size < min_valley_size) {
+            continue;
         }
+
+        if (v.size < s_max) {
+            int center = (v.start_sector + v.size / 2) % num_sectors;
+            addCandidate(center);
+        }
+        else {
+            int offset = s_max / 2;
+
+            int right_candidate = (v.start_sector + offset) % num_sectors;
+            int left_candidate = (v.end_sector - offset + num_sectors) % num_sectors;
+
+            addCandidate(right_candidate);
+            addCandidate(left_candidate);
+        }
+    }
+
+    if (H_b[target_sector] == 0) {
+        addCandidate(target_sector);
+    }
+
+    if (candidates.empty()) {
+        vfh_valid = true;
+        vfh_path_found = false;
+
+        printf("VFH+: nenasiel sa kandidat, robot stoji.\n");
+        return;
     }
 
     double min_cost = std::numeric_limits<double>::max();
-    int best_sector = target_sector;
-    bool path_found = false;
+    int best_sector = candidates[0];
+
+    printf("Candidates debug: target=%d current=%d prev=%d\n",
+           target_sector,
+           current_fi_sector,
+           prev_selected_sector);
 
     for (int c : candidates) {
-        path_found = true;
+        int d_target = sectorDiff(c, target_sector);
+        int d_current = sectorDiff(c, current_fi_sector);
+        int d_prev = sectorDiff(c, prev_selected_sector);
 
-        double cost = mi1 * calc_diff(c, target_sector, num_sectors) +
-                      mi2 * calc_diff(c, current_fi_sector, num_sectors) +
-                      mi3 * calc_diff(c, prev_selected_sector, num_sectors);
+        double cost =
+            mi1 * sectorDiff(c, target_sector) +
+            mi2 * sectorDiff(c, current_fi_sector) +
+            mi3 * sectorDiff(c, prev_selected_sector);
+
+        printf("  c=%d cost=%f d_target=%d d_current=%d d_prev=%d Hb=%d Hp=%f\n",
+               c,
+               cost,
+               d_target,
+               d_current,
+               d_prev,
+               H_b[c],
+               H_p[c]);
 
         if (cost < min_cost) {
             min_cost = cost;
@@ -365,22 +582,28 @@ void robot::calculateVFH(const std::vector<LaserData> &laserData){
         }
     }
 
-    if (path_found) {
-        prev_selected_sector = best_sector;
-        vfh_target_angle = best_sector * delta;
+    prev_selected_sector = best_sector;
 
-        printf("Ciel VFH uhol: %f, Cielovy sektor: %d\n", vfh_target_angle, best_sector);
-        printf("Pocet najdenych priechodov: %zu, Pocet kandidatov: %zu\n", valleys.size(), candidates.size());
-        printf("Histogram: ");
-        for(int i=0; i<num_sectors; i++) {
-            printf("%d", H_b[i]);
-        }
-        printf("\n");
-    } else {
-        printf("Ziadna cesta nebola najdena! Robot stoji.\n");
+    double vfh_target_angle_local_deg = normalizeAngleDeg((best_sector + 0.5) * sector_width);
+
+    vfh_target_angle_deg = normalizeAngleDeg(fi_deg + vfh_target_angle_local_deg);
+    vfh_target_angle = normalizeAngle(vfh_target_angle_deg * PI / 180.0);
+
+    vfh_valid = true;
+    vfh_path_found = true;
+
+    printf("VFH+: cielovy sektor=%d, vybrany sektor=%d, uhol=%f deg, kandidati=%zu\n",
+           target_sector,
+           best_sector,
+           vfh_target_angle_deg,
+           candidates.size());
+
+    printf("VFH+ Hm: ");
+    for (int k = 0; k < num_sectors; ++k) {
+        printf("%d", H_b[k]);
     }
+    printf("\n");
 }
-
 
 ///toto je calback na data z lidaru, ktory ste podhodili robotu vo funkcii initAndStartRobot
 /// vola sa ked dojdu nove data z lidaru
@@ -390,9 +613,13 @@ int robot::processThisLidar(const std::vector<LaserData>& laserData)
     copyOfLaserData=laserData;
     //tu mozete robit s datami z lidaru.. napriklad najst prekazky, zapisat do mapy. naplanovat ako sa prekazke vyhnut.
     // ale nic vypoctovo narocne - to iste vlakno ktore cita data z lidaru
-   // updateLaserPicture=1;
+    // updateLaserPicture=1;
 
-    calculateVFH(copyOfLaserData);
+    if (useVFHNavigation && regulatorEnabled) {
+        if (!vfh_valid || regulatorState == MOVE_TO_TARGET) {
+            calculateVFH(copyOfLaserData);
+        }
+    }
 
     emit publishLidar(copyOfLaserData);
     // update();//tento prikaz prinuti prekreslit obrazovku.. zavola sa paintEvent funkcia
@@ -401,7 +628,7 @@ int robot::processThisLidar(const std::vector<LaserData>& laserData)
 
 }
 
-  #ifndef DISABLE_OPENCV
+#ifndef DISABLE_OPENCV
 ///toto je calback na data z kamery, ktory ste podhodili robotu vo funkcii initAndStartRobot
 /// vola sa ked dojdu nove data z kamery
 int robot::processThisCamera(cv::Mat cameraData)
@@ -415,7 +642,7 @@ int robot::processThisCamera(cv::Mat cameraData)
 }
 #endif
 
-  #ifndef DISABLE_SKELETON
+#ifndef DISABLE_SKELETON
 /// vola sa ked dojdu nove data z trackera
 int robot::processThisSkeleton(skeleton skeledata)
 {

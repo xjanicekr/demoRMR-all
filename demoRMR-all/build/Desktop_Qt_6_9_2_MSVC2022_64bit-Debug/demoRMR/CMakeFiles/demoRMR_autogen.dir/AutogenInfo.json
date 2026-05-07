@@ -1,0 +1,112 @@
+{
+	"AUTOGEN_COMMAND_LINE_LENGTH_MAX" : 32000,
+	"BUILD_DIR" : "C:/RMR_semestralne/demoRMR-all/demoRMR-all/build/Desktop_Qt_6_9_2_MSVC2022_64bit-Debug/demoRMR/demoRMR_autogen",
+	"CMAKE_BINARY_DIR" : "C:/RMR_semestralne/demoRMR-all/demoRMR-all/build/Desktop_Qt_6_9_2_MSVC2022_64bit-Debug",
+	"CMAKE_CURRENT_BINARY_DIR" : "C:/RMR_semestralne/demoRMR-all/demoRMR-all/build/Desktop_Qt_6_9_2_MSVC2022_64bit-Debug/demoRMR",
+	"CMAKE_CURRENT_SOURCE_DIR" : "C:/RMR_semestralne/demoRMR-all/demoRMR-all/demoRMR",
+	"CMAKE_EXECUTABLE" : "C:/Qt/Tools/CMake_64/bin/cmake.exe",
+	"CMAKE_LIST_FILES" : [ "C:/RMR_semestralne/demoRMR-all/demoRMR-all/demoRMR/CMakeLists.txt" ],
+	"CMAKE_SOURCE_DIR" : "C:/RMR_semestralne/demoRMR-all/demoRMR-all",
+	"CROSS_CONFIG" : false,
+	"DEP_FILE" : "C:/RMR_semestralne/demoRMR-all/demoRMR-all/build/Desktop_Qt_6_9_2_MSVC2022_64bit-Debug/demoRMR/demoRMR_autogen/deps",
+	"DEP_FILE_RULE_NAME" : "demoRMR_autogen/timestamp",
+	"HEADERS" : 
+	[
+		[
+			"C:/RMR_semestralne/demoRMR-all/demoRMR-all/demoRMR/mainwindow.h",
+			"MU",
+			"EWIEGA46WW/moc_mainwindow.cpp",
+			null
+		],
+		[
+			"C:/RMR_semestralne/demoRMR-all/demoRMR-all/demoRMR/robot.h",
+			"MU",
+			"EWIEGA46WW/moc_robot.cpp",
+			null
+		]
+	],
+	"HEADER_EXTENSIONS" : [ "h", "hh", "h++", "hm", "hpp", "hxx", "in", "txx" ],
+	"INCLUDE_DIR" : "C:/RMR_semestralne/demoRMR-all/demoRMR-all/build/Desktop_Qt_6_9_2_MSVC2022_64bit-Debug/demoRMR/demoRMR_autogen/include",
+	"MOC_COMPILATION_FILE" : "C:/RMR_semestralne/demoRMR-all/demoRMR-all/build/Desktop_Qt_6_9_2_MSVC2022_64bit-Debug/demoRMR/demoRMR_autogen/mocs_compilation.cpp",
+	"MOC_DEFINITIONS" : 
+	[
+		"DISABLE_JOYSTICK",
+		"DISABLE_OPENCV",
+		"DISABLE_SKELETON",
+		"QT_CORE_LIB",
+		"QT_GUI_LIB",
+		"QT_NETWORK_LIB",
+		"QT_WIDGETS_LIB",
+		"ROBOT_LIBRARY",
+		"UNICODE",
+		"WIN32",
+		"WIN64",
+		"_ENABLE_EXTENDED_ALIGNED_STORAGE",
+		"_UNICODE",
+		"_WIN64"
+	],
+	"MOC_DEPEND_FILTERS" : 
+	[
+		[
+			"Q_PLUGIN_METADATA",
+			"[\n][ \t]*Q_PLUGIN_METADATA[ \t]*\\([^\\)]*FILE[ \t]*\"([^\"]+)\""
+		]
+	],
+	"MOC_INCLUDES" : 
+	[
+		"C:/Qt/6.9.2/msvc2022_64/include/QtCore",
+		"C:/Qt/6.9.2/msvc2022_64/include",
+		"C:/Qt/6.9.2/msvc2022_64/mkspecs/win32-msvc",
+		"C:/Program Files/RobotLib 1.1.0/include",
+		"C:/Qt/6.9.2/msvc2022_64/include/QtNetwork",
+		"C:/Qt/6.9.2/msvc2022_64/include/QtWidgets",
+		"C:/Qt/6.9.2/msvc2022_64/include/QtGui"
+	],
+	"MOC_MACRO_NAMES" : 
+	[
+		"Q_OBJECT",
+		"Q_GADGET",
+		"Q_NAMESPACE",
+		"Q_NAMESPACE_EXPORT",
+		"Q_GADGET_EXPORT",
+		"Q_ENUM_NS"
+	],
+	"MOC_OPTIONS" : [ "-DWIN32", "--compiler-flavor=msvc" ],
+	"MOC_PATH_PREFIX" : false,
+	"MOC_PREDEFS_CMD" : [],
+	"MOC_PREDEFS_FILE" : "",
+	"MOC_RELAXED_MODE" : false,
+	"MOC_SKIP" : [],
+	"MULTI_CONFIG" : false,
+	"PARALLEL" : 3,
+	"PARSE_CACHE_FILE" : "C:/RMR_semestralne/demoRMR-all/demoRMR-all/build/Desktop_Qt_6_9_2_MSVC2022_64bit-Debug/demoRMR/CMakeFiles/demoRMR_autogen.dir/ParseCache.txt",
+	"QT_MOC_EXECUTABLE" : "C:/Qt/6.9.2/msvc2022_64/bin/moc.exe",
+	"QT_UIC_EXECUTABLE" : "C:/Qt/6.9.2/msvc2022_64/bin/uic.exe",
+	"QT_VERSION_MAJOR" : 6,
+	"QT_VERSION_MINOR" : 9,
+	"SETTINGS_FILE" : "C:/RMR_semestralne/demoRMR-all/demoRMR-all/build/Desktop_Qt_6_9_2_MSVC2022_64bit-Debug/demoRMR/CMakeFiles/demoRMR_autogen.dir/AutogenUsed.txt",
+	"SOURCES" : 
+	[
+		[
+			"C:/RMR_semestralne/demoRMR-all/demoRMR-all/demoRMR/main.cpp",
+			"MU",
+			null
+		],
+		[
+			"C:/RMR_semestralne/demoRMR-all/demoRMR-all/demoRMR/mainwindow.cpp",
+			"MU",
+			null
+		],
+		[
+			"C:/RMR_semestralne/demoRMR-all/demoRMR-all/demoRMR/robot.cpp",
+			"MU",
+			null
+		]
+	],
+	"UIC_OPTIONS" : [],
+	"UIC_SEARCH_PATHS" : [],
+	"UIC_SKIP" : [],
+	"UIC_UI_FILES" : [],
+	"USE_BETTER_GRAPH" : true,
+	"VERBOSITY" : 0
+}
