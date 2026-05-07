@@ -64,7 +64,7 @@ void robot::initAndStartRobot(std::string ipaddress)
 
     cesta.push_back({0.6, 3.0});
     cesta.push_back({3.0, 3.0});
-    //cesta.push_back({0.0, 2.0});
+    cesta.push_back({4.4, 4.0}); //1.0, 2.5 //4.0, 4.0 v sim fungovala
     //cesta.push_back({0.0, 3.5});
 
     setPath(cesta);
@@ -123,7 +123,7 @@ void robot::setPath(const std::vector<Waypoint>& newPath) {
 
     H_b.assign(num_sectors, 0);
 
-    prev_selected_sector = 0;
+    prev_selected_sector = -1;
 
     useDirectCommands = 0;
 
@@ -181,10 +181,13 @@ int robot::processThisRobot(const TKobukiData &robotdata)
 
         double distance_error = sqrt(dx * dx + dy * dy);
 
-        double active_deadband = distance_deadband;
+        double active_deadband;
 
         if (!path.empty() && currentWaypointIndex < (int)path.size() - 1) {
-            active_deadband = distance_deadband;
+            active_deadband = intermediate_deadband;
+        }
+        else {
+            active_deadband = final_deadband;
         }
 
         if (distance_error < active_deadband) {
@@ -203,7 +206,7 @@ int robot::processThisRobot(const TKobukiData &robotdata)
                 vfh_valid = false;
                 vfh_path_found = false;
 
-                prev_selected_sector = 0;
+                prev_selected_sector = -1;
 
                 printf("Waypoint dosiahnuty. Prechadzam na waypoint %d: x=%f y=%f\n",
                        currentWaypointIndex,
@@ -560,12 +563,17 @@ void robot::calculateVFH(const std::vector<LaserData> &laserData)
     for (int c : candidates) {
         int d_target = sectorDiff(c, target_sector);
         int d_current = sectorDiff(c, current_fi_sector);
-        int d_prev = sectorDiff(c, prev_selected_sector);
+
+        int d_prev = 0;
+
+        if (prev_selected_sector >= 0) {
+            d_prev = sectorDiff(c, prev_selected_sector);
+        }
 
         double cost =
-            mi1 * sectorDiff(c, target_sector) +
-            mi2 * sectorDiff(c, current_fi_sector) +
-            mi3 * sectorDiff(c, prev_selected_sector);
+            mi1 * d_target +
+            mi2 * d_current +
+            mi3 * d_prev;
 
         printf("  c=%d cost=%f d_target=%d d_current=%d d_prev=%d Hb=%d Hp=%f\n",
                c,

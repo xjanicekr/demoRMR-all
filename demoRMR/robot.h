@@ -91,11 +91,13 @@ private:
     double max_rot_speed = 0.8;
 
     double Kp_trans = 400.0;
-    double max_trans_speed = 120.0;
+    double max_trans_speed = 80;
 
     double angle_deadband_1 = 0.0872665;   // 5 stupnov
     double angle_deadband_2 = 0.174533;   // 10 stupnov
-    double distance_deadband = 0.15;      // 15 cm
+
+    double final_deadband = 0.10;
+    double intermediate_deadband = 0.05;
 
     double trans_ramp_speed = 0.0;
     double trans_ramp_step = 5.0;
@@ -117,20 +119,20 @@ private:
     double rs = 0.125;
     double total_radius = robot_radius + rs;
 
-    double laser_max_range = 2.0;
+    double laser_max_range = 3.0;
 
     double c_i = 1;
     double a_i = 1;
-    double b_i = 0.5;
+    double b_i = 0.33;
 
-    double tau_low = 18.0;
-    double tau_high = 25.0;
+    double tau_low = 18.0; //18.0 Sim //5.0 skus real
+    double tau_high = 25.0; //25.0 Sim //9.0 skus real
 
-    double mi1 = 12.0;
-    double mi2 = 1.0;
-    double mi3 = 0.5;
+    double mi1 = 5.0;
+    double mi2 = 0.6;
+    double mi3 = 0.3;
 
-    int prev_selected_sector = 0;
+    int prev_selected_sector = -1;
 
     std::vector<Waypoint> path;
     int currentWaypointIndex = 0;
