@@ -107,23 +107,23 @@ void setPath()
 {
     clearPath();
 //sim
-    addWaypoint(0.0, 3.35);
-    addWaypoint(2.7, 4.2);
-    addWaypoint(4.2, 3.9);
-    addWaypoint(2.8, 4.1);
-    addWaypoint(3.1, 0.7);
-    addWaypoint(4.9, 0.7);
-    addWaypoint(4.9, 1.3);
-    addWaypoint(4.9, 0.7);
-    addWaypoint(3.1, 0.7);
-    addWaypoint(2.9, -1.01);
-    addWaypoint(1.5, -1.05);
-//real
     // addWaypoint(0.0, 3.35);
-    // addWaypoint(1.5, 3.75);
-    // addWaypoint(3.24, 3.7);
-    // addWaypoint(4.14, 3.15);
-    // addWaypoint(3.24, 3.7);
+    // addWaypoint(2.7, 4.2);
+    // addWaypoint(4.2, 3.9);
+    // addWaypoint(2.8, 4.1);
+    // addWaypoint(3.1, 0.7);
+    // addWaypoint(4.9, 0.7);
+    // addWaypoint(4.9, 1.3);
+    // addWaypoint(4.9, 0.7);
+    // addWaypoint(3.1, 0.7);
+    // addWaypoint(2.9, -1.01);
+    // addWaypoint(1.5, -1.05);
+//real
+    addWaypoint(0.0, 3.35);
+    addWaypoint(1.5, 3.75);
+    addWaypoint(3.24, 3.7);
+    addWaypoint(4.14, 3.15);
+    addWaypoint(3.24, 3.7);
 
 }
 std::deque<Pose> poseHistory;
@@ -397,27 +397,8 @@ struct Point {
 };
 
 
-Point toGlobal(
-    float x_r, float y_r,
-    float phi_r,
-    const LaserData& scan)
-{
-    Point p;
 
-    float angle = phi_r - scan.scanAngle;
 
-    angle = angle * M_PI / 180.0;
-    float dist = scan.scanDistance / 1000.0f;
-
-    float maxDist = (GRID_SIZE * RESOLUTION) / 2.0f;
-
-    if (dist > maxDist)
-        dist = maxDist;
-    p.x = x_r + dist * cos(angle);
-    p.y = y_r + dist * sin(angle);
-
-    return p;
-}
 void markLine(int x0, int y0, int x1, int y1, Cell grid[][GRID_SIZE])
 {
     int dx = abs(x1 - x0);
@@ -548,11 +529,13 @@ int robot::processThisLidar(const std::vector<LaserData>& laserData)
 
             if (dist > 0.15f && dist < LIDAR_MAX - 0.05f)
             {
+                if(dist < 0.6f || dist > 0.7f){
                 markLine(robotX, robotY, x_end, y_end, grid);
                 if (x_end >= 0 && x_end < GRID_SIZE &&
                     y_end >= 0 && y_end < GRID_SIZE)
                 {
                     grid[y_end][x_end].occupied = 1;
+                }
                 }
             }
         }
