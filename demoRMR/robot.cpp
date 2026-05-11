@@ -63,9 +63,8 @@ void robot::initAndStartRobot(std::string ipaddress)
     std::vector<Waypoint> cesta;
 
     cesta.push_back({0.6, 3.0});
-    cesta.push_back({3.0, 3.0});
-    cesta.push_back({4.4, 4.0}); //1.0, 2.5 //4.0, 4.0 v sim fungovala
-    //cesta.push_back({0.0, 3.5});
+    cesta.push_back({3.0, 2.5});
+    cesta.push_back({4.0, 4.0}); //1.0, 2.5
 
     setPath(cesta);
 }
@@ -206,7 +205,7 @@ int robot::processThisRobot(const TKobukiData &robotdata)
                 vfh_valid = false;
                 vfh_path_found = false;
 
-                prev_selected_sector = -1;
+                //prev_selected_sector = -1;
 
                 printf("Waypoint dosiahnuty. Prechadzam na waypoint %d: x=%f y=%f\n",
                        currentWaypointIndex,
@@ -234,7 +233,7 @@ int robot::processThisRobot(const TKobukiData &robotdata)
             double desired_angle = atan2(dy, dx); //Global uhol k cielu
 
             if (useVFHNavigation) {
-                desired_angle = vfh_target_angle;
+                desired_angle = vfh_target_angle; //Global uhol z VFH+
             }
 
             double angle_error = normalizeAngle(desired_angle - fi);
@@ -481,6 +480,7 @@ void robot::calculateVFH(const std::vector<LaserData> &laserData)
     if (!any_blocked) {
         valleys.push_back({0, num_sectors - 1, num_sectors});
     }
+
     else {
         int start_blocked = -1;
         for (int k = 0; k < num_sectors; ++k) {
@@ -563,7 +563,6 @@ void robot::calculateVFH(const std::vector<LaserData> &laserData)
     for (int c : candidates) {
         int d_target = sectorDiff(c, target_sector);
         int d_current = sectorDiff(c, current_fi_sector);
-
         int d_prev = 0;
 
         if (prev_selected_sector >= 0) {
@@ -624,9 +623,7 @@ int robot::processThisLidar(const std::vector<LaserData>& laserData)
     // updateLaserPicture=1;
 
     if (useVFHNavigation && regulatorEnabled) {
-        if (!vfh_valid || regulatorState == MOVE_TO_TARGET) {
-            calculateVFH(copyOfLaserData);
-        }
+        calculateVFH(copyOfLaserData);
     }
 
     emit publishLidar(copyOfLaserData);
