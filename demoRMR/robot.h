@@ -125,8 +125,8 @@ private:
     double a_i = 1;
     double b_i = 0.33;
 
-    double tau_low = 8.0; //18.0 Sim //5.0 skus real
-    double tau_high = 12.0; //25.0 Sim //9.0 skus real
+    double tau_low = 18.0; //18.0 Sim //5.0 skus real
+    double tau_high = 25.0; //25.0 Sim //9.0 skus real
 
     double mi1 = 5.0;
     double mi2 = 0.6;

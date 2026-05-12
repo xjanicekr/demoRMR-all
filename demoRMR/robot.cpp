@@ -62,8 +62,6 @@ void robot::initAndStartRobot(std::string ipaddress)
 
     std::vector<Waypoint> cesta;
 
-    cesta.push_back({0.6, 3.0});
-    cesta.push_back({3.0, 2.5});
     cesta.push_back({4.0, 4.0}); //1.0, 2.5
 
     setPath(cesta);
